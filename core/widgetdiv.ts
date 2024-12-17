@@ -4,28 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * A div that floats on top of Blockly.  This singleton contains
- *     temporary HTML UI widgets that the user is currently interacting with.
- *     E.g. text input areas, colour pickers, context menus.
- *
- * @namespace Blockly.WidgetDiv
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.WidgetDiv');
+// Former goog.module ID: Blockly.WidgetDiv
 
 import * as common from './common.js';
+import {Field} from './field.js';
 import * as dom from './utils/dom.js';
 import type {Rect} from './utils/rect.js';
 import type {Size} from './utils/size.js';
 import type {WorkspaceSvg} from './workspace_svg.js';
 
-
 /** The object currently using this container. */
 let owner: unknown = null;
 
+/** The workspace associated with the owner currently using this container. */
+let ownerWorkspace: WorkspaceSvg | null = null;
+
 /** Optional cleanup function set by whichever object uses the widget. */
-let dispose: (() => void)|null = null;
+let dispose: (() => void) | null = null;
+
+/** A class name representing the current owner's workspace container. */
+const containerClassName = 'blocklyWidgetDiv';
 
 /** A class name representing the current owner's workspace renderer. */
 let rendererClassName = '';
@@ -34,15 +32,14 @@ let rendererClassName = '';
 let themeClassName = '';
 
 /** The HTML container for popup overlays (e.g. editor widgets). */
-let containerDiv: HTMLDivElement|null;
+let containerDiv: HTMLDivElement | null;
 
 /**
  * Returns the HTML container for editor widgets.
  *
  * @returns The editor widget container.
- * @alias Blockly.WidgetDiv.getDiv
  */
-export function getDiv(): HTMLDivElement|null {
+export function getDiv(): HTMLDivElement | null {
   return containerDiv;
 }
 
@@ -50,27 +47,29 @@ export function getDiv(): HTMLDivElement|null {
  * Allows unit tests to reset the div. Do not use outside of tests.
  *
  * @param newDiv The new value for the DIV field.
- * @alias Blockly.WidgetDiv.testOnly_setDiv
  * @internal
  */
-export function testOnly_setDiv(newDiv: HTMLDivElement|null) {
+export function testOnly_setDiv(newDiv: HTMLDivElement | null) {
   containerDiv = newDiv;
+  if (newDiv === null) {
+    document.querySelector('.' + containerClassName)?.remove();
+  }
 }
 
 /**
  * Create the widget div and inject it onto the page.
- *
- * @alias Blockly.WidgetDiv.createDom
  */
 export function createDom() {
-  if (containerDiv) {
-    return;  // Already created.
+  const container = common.getParentContainer() || document.body;
+
+  if (document.querySelector('.' + containerClassName)) {
+    containerDiv = document.querySelector('.' + containerClassName);
+  } else {
+    containerDiv = document.createElement('div') as HTMLDivElement;
+    containerDiv.className = containerClassName;
   }
 
-  containerDiv = document.createElement('div') as HTMLDivElement;
-  containerDiv.className = 'blocklyWidgetDiv';
-  const container = common.getParentContainer() || document.body;
-  container.appendChild(containerDiv);
+  container.appendChild(containerDiv!);
 }
 
 /**
@@ -80,9 +79,14 @@ export function createDom() {
  * @param rtl Right-to-left (true) or left-to-right (false).
  * @param newDispose Optional cleanup function to be run when the widget is
  *     closed.
- * @alias Blockly.WidgetDiv.show
+ * @param workspace The workspace associated with the widget owner.
  */
-export function show(newOwner: unknown, rtl: boolean, newDispose: () => void) {
+export function show(
+  newOwner: unknown,
+  rtl: boolean,
+  newDispose: () => void,
+  workspace?: WorkspaceSvg | null,
+) {
   hide();
   owner = newOwner;
   dispose = newDispose;
@@ -90,9 +94,16 @@ export function show(newOwner: unknown, rtl: boolean, newDispose: () => void) {
   if (!div) return;
   div.style.direction = rtl ? 'rtl' : 'ltr';
   div.style.display = 'block';
-  const mainWorkspace = common.getMainWorkspace() as WorkspaceSvg;
-  rendererClassName = mainWorkspace.getRenderer().getClassName();
-  themeClassName = mainWorkspace.getTheme().getClassName();
+  if (!workspace && newOwner instanceof Field) {
+    // For backward compatibility with plugin fields that do not provide a
+    // workspace to this function, attempt to derive it from the field.
+    workspace = (newOwner as Field).getSourceBlock()?.workspace as WorkspaceSvg;
+  }
+  ownerWorkspace = workspace ?? null;
+  const rendererWorkspace =
+    workspace ?? (common.getMainWorkspace() as WorkspaceSvg);
+  rendererClassName = rendererWorkspace.getRenderer().getClassName();
+  themeClassName = rendererWorkspace.getTheme().getClassName();
   if (rendererClassName) {
     dom.addClass(div, rendererClassName);
   }
@@ -103,8 +114,6 @@ export function show(newOwner: unknown, rtl: boolean, newDispose: () => void) {
 
 /**
  * Destroy the widget and hide the div.
- *
- * @alias Blockly.WidgetDiv.hide
  */
 export function hide() {
   if (!isVisible()) {
@@ -117,7 +126,7 @@ export function hide() {
   div.style.display = 'none';
   div.style.left = '';
   div.style.top = '';
-  dispose && dispose();
+  if (dispose) dispose();
   dispose = null;
   div.textContent = '';
 
@@ -136,7 +145,6 @@ export function hide() {
  * Is the container visible?
  *
  * @returns True if visible.
- * @alias Blockly.WidgetDiv.isVisible
  */
 export function isVisible(): boolean {
   return !!owner;
@@ -147,13 +155,25 @@ export function isVisible(): boolean {
  * object.
  *
  * @param oldOwner The object that was using this container.
- * @alias Blockly.WidgetDiv.hideIfOwner
  */
 export function hideIfOwner(oldOwner: unknown) {
   if (owner === oldOwner) {
     hide();
   }
 }
+
+/**
+ * Destroy the widget and hide the div if it is being used by an object in the
+ * specified workspace, or if it is used by an unknown workspace.
+ *
+ * @param oldOwnerWorkspace The workspace that was using this container.
+ */
+export function hideIfOwnerIsInWorkspace(oldOwnerWorkspace: WorkspaceSvg) {
+  if (ownerWorkspace === null || ownerWorkspace === oldOwnerWorkspace) {
+    hide();
+  }
+}
+
 /**
  * Set the widget div's position and height.  This function does nothing clever:
  * it will not ensure that your widget div ends up in the visible window.
@@ -182,11 +202,14 @@ function positionInternal(x: number, y: number, height: number) {
  *     window coordinates.
  * @param rtl Whether the workspace is in RTL mode.  This determines horizontal
  *     alignment.
- * @alias Blockly.WidgetDiv.positionWithAnchor
  * @internal
  */
 export function positionWithAnchor(
-    viewportBBox: Rect, anchorBBox: Rect, widgetSize: Size, rtl: boolean) {
+  viewportBBox: Rect,
+  anchorBBox: Rect,
+  widgetSize: Size,
+  rtl: boolean,
+) {
   const y = calculateY(viewportBBox, anchorBBox, widgetSize);
   const x = calculateX(viewportBBox, anchorBBox, widgetSize, rtl);
 
@@ -211,8 +234,11 @@ export function positionWithAnchor(
  *     window coordinates.
  */
 function calculateX(
-    viewportBBox: Rect, anchorBBox: Rect, widgetSize: Size,
-    rtl: boolean): number {
+  viewportBBox: Rect,
+  anchorBBox: Rect,
+  widgetSize: Size,
+  rtl: boolean,
+): number {
   if (rtl) {
     // Try to align the right side of the field and the right side of widget.
     const widgetLeft = anchorBBox.right - widgetSize.width;
@@ -242,7 +268,10 @@ function calculateX(
  *     window coordinates.
  */
 function calculateY(
-    viewportBBox: Rect, anchorBBox: Rect, widgetSize: Size): number {
+  viewportBBox: Rect,
+  anchorBBox: Rect,
+  widgetSize: Size,
+): number {
   // Flip the widget vertically if off the bottom.
   // The widget could go off the top of the window, but it would also go off
   // the bottom.  The window is just too small.
@@ -252,5 +281,27 @@ function calculateY(
   } else {
     // The top of the widget is at the bottom of the field.
     return anchorBBox.bottom;
+  }
+}
+
+/**
+ * Determine if the owner is a field for purposes of repositioning.
+ * We can't simply check `instanceof Field` as that would introduce a circular
+ * dependency.
+ */
+function isRepositionable(item: any): item is Field {
+  return !!item?.repositionForWindowResize;
+}
+
+/**
+ * Reposition the widget div if the owner of it says to.
+ * If the owner isn't a field, just give up and hide it.
+ */
+export function repositionForWindowResize(): void {
+  if (!isRepositionable(owner) || !owner.repositionForWindowResize()) {
+    // If the owner is not a Field, or if the owner returns false from the
+    // reposition method, we should hide the widget div. Otherwise, we'll assume
+    // the owner handled any needed resize.
+    hide();
   }
 }

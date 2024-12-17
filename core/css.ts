@@ -4,14 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Inject Blockly's CSS synchronously.
- *
- * @namespace Blockly.Css
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.Css');
-
+// Former goog.module ID: Blockly.Css
 
 /** Has CSS already been injected? */
 let injected = false;
@@ -21,7 +14,6 @@ let injected = false;
  * components such as fields and the toolbox to store separate CSS.
  *
  * @param cssContent Multiline CSS string or an array of single lines of CSS.
- * @alias Blockly.Css.register
  */
 export function register(cssContent: string) {
   if (injected) {
@@ -40,7 +32,6 @@ export function register(cssContent: string) {
  * @param hasCss If false, don't inject CSS (providing CSS becomes the
  *     document's responsibility).
  * @param pathToMedia Path from page to the Blockly media directory.
- * @alias Blockly.Css.inject
  */
 export function inject(hasCss: boolean, pathToMedia: string) {
   // Only inject the CSS once.
@@ -67,8 +58,6 @@ export function inject(hasCss: boolean, pathToMedia: string) {
 
 /**
  * The CSS content for Blockly.
- *
- * @alias Blockly.Css.content
  */
 let content = `
 .blocklySvg {
@@ -90,37 +79,14 @@ let content = `
   position: relative;
   overflow: hidden;  /* So blocks in drag surface disappear at edges */
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .blocklyNonSelectable {
   user-select: none;
   -ms-user-select: none;
   -webkit-user-select: none;
-}
-
-.blocklyWsDragSurface {
-  display: none;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-/* Added as a separate rule with multiple classes to make it more specific
-   than a bootstrap rule that selects svg:root. See issue #1275 for context.
-*/
-.blocklyWsDragSurface.blocklyOverflowVisible {
-  overflow: visible;
-}
-
-.blocklyBlockDragSurface {
-  display: none;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: visible !important;
-  z-index: 50;  /* Display below toolbox, but above everything else. */
 }
 
 .blocklyBlockCanvas.blocklyCanvasTransitioning,
@@ -160,7 +126,7 @@ let content = `
 }
 
 .blocklyDropDownContent {
-  max-height: 300px;  // @todo: spec for maximum height.
+  max-height: 300px;  /* @todo: spec for maximum height. */
   overflow: auto;
   overflow-x: hidden;
   position: relative;
@@ -235,35 +201,21 @@ let content = `
 }
 
 .blocklyDraggable {
-  /* backup for browsers (e.g. IE11) that don't support grab */
-  cursor: url("<<<PATH>>>/handopen.cur"), auto;
   cursor: grab;
   cursor: -webkit-grab;
 }
 
-  /* backup for browsers (e.g. IE11) that don't support grabbing */
 .blocklyDragging {
-  /* backup for browsers (e.g. IE11) that don't support grabbing */
-  cursor: url("<<<PATH>>>/handclosed.cur"), auto;
   cursor: grabbing;
   cursor: -webkit-grabbing;
+  /* Drag surface disables events to not block the toolbox, so we have to
+   * reenable them here for the cursor values to work. */
+  pointer-events: auto;
 }
 
   /* Changes cursor on mouse down. Not effective in Firefox because of
      https://bugzilla.mozilla.org/show_bug.cgi?id=771241 */
 .blocklyDraggable:active {
-  /* backup for browsers (e.g. IE11) that don't support grabbing */
-  cursor: url("<<<PATH>>>/handclosed.cur"), auto;
-  cursor: grabbing;
-  cursor: -webkit-grabbing;
-}
-
-/* Change the cursor on the whole drag surface in case the mouse gets
-   ahead of block during a drag. This way the cursor is still a closed hand.
-  */
-.blocklyBlockDragSurface .blocklyDraggable {
-  /* backup for browsers (e.g. IE11) that don't support grabbing */
-  cursor: url("<<<PATH>>>/handclosed.cur"), auto;
   cursor: grabbing;
   cursor: -webkit-grabbing;
 }
@@ -299,10 +251,6 @@ let content = `
   stroke: none;
 }
 
-.blocklyMultilineText {
-  font-family: monospace;
-}
-
 .blocklyNonEditableText>text {
   pointer-events: none;
 }
@@ -314,18 +262,6 @@ let content = `
 
 .blocklyText text {
   cursor: default;
-}
-
-/*
-  Don't allow users to select text.  It gets annoying when trying to
-  drag a block and selected text moves instead.
-*/
-.blocklySvg text,
-.blocklyBlockDragSurface text {
-  user-select: none;
-  -ms-user-select: none;
-  -webkit-user-select: none;
-  cursor: inherit;
 }
 
 .blocklyHidden {
@@ -358,6 +294,7 @@ let content = `
 .blocklyMinimalBody {
   margin: 0;
   padding: 0;
+  height: 100%;
 }
 
 .blocklyHtmlInput {
@@ -373,11 +310,15 @@ let content = `
   box-sizing: border-box;
 }
 
-/* Edge and IE introduce a close icon when the input value is longer than a
-   certain length. This affects our sizing calculations of the text input.
-   Hiding the close icon to avoid that. */
-.blocklyHtmlInput::-ms-clear {
-  display: none;
+/* Remove the increase and decrease arrows on the field number editor */
+input.blocklyHtmlInput[type=number]::-webkit-inner-spin-button,
+input.blocklyHtmlInput[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
 }
 
 .blocklyMainBackground {
@@ -545,5 +486,16 @@ let content = `
 .blocklyMenuItemRtl .blocklyMenuItemCheckbox {
   float: right;
   margin-right: -24px;
+}
+
+.blocklyBlockDragSurface, .blocklyAnimationLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: visible !important;
+  z-index: 80;
+  pointer-events: none;
 }
 `;

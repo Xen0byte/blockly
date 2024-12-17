@@ -4,61 +4,43 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Utility methods for DOM manipulation.
- * These methods are not specific to Blockly, and could be factored out into
- * a JavaScript framework such as Closure.
- *
- * @namespace Blockly.utils.dom
- */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.utils.dom');
+// Former goog.module ID: Blockly.utils.dom
 
 import type {Svg} from './svg.js';
 
-
 /**
  * Required name space for SVG elements.
- *
- * @alias Blockly.utils.dom.SVG_NS
  */
 export const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
  * Required name space for HTML elements.
- *
- * @alias Blockly.utils.dom.HTML_NS
  */
 export const HTML_NS = 'http://www.w3.org/1999/xhtml';
 
 /**
  * Required name space for XLINK elements.
- *
- * @alias Blockly.utils.dom.XLINK_NS
  */
 export const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
 /**
  * Node type constants.
  * https://developer.mozilla.org/en-US/docs/Web/API/Node/nodeType
- *
- * @alias Blockly.utils.dom.NodeType
  */
 export enum NodeType {
   ELEMENT_NODE = 1,
   TEXT_NODE = 3,
   COMMENT_NODE = 8,
-  DOCUMENT_POSITION_CONTAINED_BY = 16
 }
 
 /** Temporary cache of text widths. */
-let cacheWidths: {[key: string]: number}|null = null;
+let cacheWidths: {[key: string]: number} | null = null;
 
 /** Number of current references to cache. */
 let cacheReference = 0;
 
 /** A HTML canvas context used for computing text width. */
-let canvasContext: CanvasRenderingContext2D|null = null;
+let canvasContext: CanvasRenderingContext2D | null = null;
 
 /**
  * Helper method for creating SVG elements.
@@ -67,12 +49,13 @@ let canvasContext: CanvasRenderingContext2D|null = null;
  * @param attrs Dictionary of attribute names and values.
  * @param opt_parent Optional parent on which to append the element.
  * @returns if name is a string or a more specific type if it a member of Svg.
- * @alias Blockly.utils.dom.createSvgElement
  */
 export function createSvgElement<T extends SVGElement>(
-    name: string|Svg<T>, attrs: {[key: string]: string|number},
-    opt_parent?: Element|null): T {
-  const e = document.createElementNS(SVG_NS, String(name)) as T;
+  name: string | Svg<T>,
+  attrs: {[key: string]: string | number},
+  opt_parent?: Element | null,
+): T {
+  const e = document.createElementNS(SVG_NS, `${name}`) as T;
   for (const key in attrs) {
     e.setAttribute(key, `${attrs[key]}`);
   }
@@ -90,7 +73,6 @@ export function createSvgElement<T extends SVGElement>(
  * @param element DOM element to add class to.
  * @param className Name of class to add.
  * @returns True if class was added, false if already present.
- * @alias Blockly.utils.dom.addClass
  */
 export function addClass(element: Element, className: string): boolean {
   const classNames = className.split(' ');
@@ -106,7 +88,6 @@ export function addClass(element: Element, className: string): boolean {
  *
  * @param element DOM element to remove classes from.
  * @param classNames A string of one or multiple class names for an element.
- * @alias Blockly.utils.dom.removeClasses
  */
 export function removeClasses(element: Element, classNames: string) {
   element.classList.remove(...classNames.split(' '));
@@ -120,7 +101,6 @@ export function removeClasses(element: Element, classNames: string) {
  * @param element DOM element to remove class from.
  * @param className Name of class to remove.
  * @returns True if class was removed, false if never present.
- * @alias Blockly.utils.dom.removeClass
  */
 export function removeClass(element: Element, className: string): boolean {
   const classNames = className.split(' ');
@@ -137,7 +117,6 @@ export function removeClass(element: Element, className: string): boolean {
  * @param element DOM element to check.
  * @param className Name of class to check.
  * @returns True if class exists, false otherwise.
- * @alias Blockly.utils.dom.hasClass
  */
 export function hasClass(element: Element, className: string): boolean {
   return element.classList.contains(className);
@@ -148,10 +127,9 @@ export function hasClass(element: Element, className: string): boolean {
  *
  * @param node The node to remove.
  * @returns The node removed if removed; else, null.
- * @alias Blockly.utils.dom.removeNode
  */
 // Copied from Closure goog.dom.removeNode
-export function removeNode(node: Node|null): Node|null {
+export function removeNode(node: Node | null): Node | null {
   return node && node.parentNode ? node.parentNode.removeChild(node) : null;
 }
 
@@ -161,7 +139,6 @@ export function removeNode(node: Node|null): Node|null {
  *
  * @param newNode New element to insert.
  * @param refNode Existing element to precede new node.
- * @alias Blockly.utils.dom.insertAfter
  */
 export function insertAfter(newNode: Element, refNode: Element) {
   const siblingNode = refNode.nextSibling;
@@ -177,30 +154,17 @@ export function insertAfter(newNode: Element, refNode: Element) {
 }
 
 /**
- * Whether a node contains another node.
- *
- * @param parent The node that should contain the other node.
- * @param descendant The node to test presence of.
- * @returns Whether the parent node contains the descendant node.
- * @alias Blockly.utils.dom.containsNode
- */
-export function containsNode(parent: Node, descendant: Node): boolean {
-  return !!(
-      parent.compareDocumentPosition(descendant) &
-      NodeType.DOCUMENT_POSITION_CONTAINED_BY);
-}
-
-/**
  * Sets the CSS transform property on an element. This function sets the
  * non-vendor-prefixed and vendor-prefixed versions for backwards compatibility
  * with older browsers. See https://caniuse.com/#feat=transforms2d
  *
  * @param element Element to which the CSS transform will be applied.
  * @param transform The value of the CSS `transform` property.
- * @alias Blockly.utils.dom.setCssTransform
  */
 export function setCssTransform(
-    element: HTMLElement|SVGElement, transform: string) {
+  element: HTMLElement | SVGElement,
+  transform: string,
+) {
   element.style['transform'] = transform;
   element.style['-webkit-transform' as any] = transform;
 }
@@ -208,8 +172,6 @@ export function setCssTransform(
 /**
  * Start caching text widths. Every call to this function MUST also call
  * stopTextWidthCache. Caches must not survive between execution threads.
- *
- * @alias Blockly.utils.dom.startTextWidthCache
  */
 export function startTextWidthCache() {
   cacheReference++;
@@ -221,8 +183,6 @@ export function startTextWidthCache() {
 /**
  * Stop caching field widths. Unless caching was already on when the
  * corresponding call to startTextWidthCache was made.
- *
- * @alias Blockly.utils.dom.stopTextWidthCache
  */
 export function stopTextWidthCache() {
   cacheReference--;
@@ -236,7 +196,6 @@ export function stopTextWidthCache() {
  *
  * @param textElement An SVG 'text' element.
  * @returns Width of element.
- * @alias Blockly.utils.dom.getTextWidth
  */
 export function getTextWidth(textElement: SVGTextElement): number {
   const key = textElement.textContent + '\n' + textElement.className.baseVal;
@@ -252,7 +211,7 @@ export function getTextWidth(textElement: SVGTextElement): number {
   // Attempt to compute fetch the width of the SVG text element.
   try {
     width = textElement.getComputedTextLength();
-  } catch (e) {
+  } catch {
     // In other cases where we fail to get the computed text. Instead, use an
     // approximation and do not cache the result. At some later point in time
     // when the block is inserted into the visible DOM, this method will be
@@ -277,13 +236,19 @@ export function getTextWidth(textElement: SVGTextElement): number {
  * @param fontWeight The font weight to use.
  * @param fontFamily The font family to use.
  * @returns Width of element.
- * @alias Blockly.utils.dom.getFastTextWidth
  */
 export function getFastTextWidth(
-    textElement: SVGTextElement, fontSize: number, fontWeight: string,
-    fontFamily: string): number {
+  textElement: SVGTextElement,
+  fontSize: number,
+  fontWeight: string,
+  fontFamily: string,
+): number {
   return getFastTextWidthWithSizeString(
-      textElement, fontSize + 'pt', fontWeight, fontFamily);
+    textElement,
+    fontSize + 'pt',
+    fontWeight,
+    fontFamily,
+  );
 }
 
 /**
@@ -298,11 +263,13 @@ export function getFastTextWidth(
  * @param fontWeight The font weight to use.
  * @param fontFamily The font family to use.
  * @returns Width of element.
- * @alias Blockly.utils.dom.getFastTextWidthWithSizeString
  */
 export function getFastTextWidthWithSizeString(
-    textElement: SVGTextElement, fontSize: string, fontWeight: string,
-    fontFamily: string): number {
+  textElement: SVGTextElement,
+  fontSize: string,
+  fontWeight: string,
+  fontFamily: string,
+): number {
   const text = textElement.textContent;
   const key = text + '\n' + textElement.className.baseVal;
   let width;
@@ -317,7 +284,7 @@ export function getFastTextWidthWithSizeString(
 
   if (!canvasContext) {
     // Inject the canvas element used for computing text widths.
-    const computeCanvas = (document.createElement('canvas'));
+    const computeCanvas = document.createElement('canvas');
     computeCanvas.className = 'blocklyComputeCanvas';
     document.body.appendChild(computeCanvas);
 
@@ -351,21 +318,26 @@ export function getFastTextWidthWithSizeString(
  * @param fontWeight The font weight to use.
  * @param fontFamily The font family to use.
  * @returns Font measurements.
- * @alias Blockly.utils.dom.measureFontMetrics
  */
 export function measureFontMetrics(
-    text: string, fontSize: string, fontWeight: string,
-    fontFamily: string): {height: number, baseline: number} {
-  const span = (document.createElement('span'));
+  text: string,
+  fontSize: string,
+  fontWeight: string,
+  fontFamily: string,
+): {height: number; baseline: number} {
+  const span = document.createElement('span');
   span.style.font = fontWeight + ' ' + fontSize + ' ' + fontFamily;
   span.textContent = text;
 
-  const block = (document.createElement('div'));
+  const block = document.createElement('div');
   block.style.width = '1px';
   block.style.height = '0';
 
-  const div = (document.createElement('div'));
-  div.setAttribute('style', 'position: fixed; top: 0; left: 0; display: flex;');
+  const div = document.createElement('div');
+  div.style.display = 'flex';
+  div.style.position = 'fixed';
+  div.style.top = '0';
+  div.style.left = '0';
   div.appendChild(span);
   div.appendChild(block);
 
