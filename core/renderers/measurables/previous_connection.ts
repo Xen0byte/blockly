@@ -4,21 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Class representing the space a previous connection takes up
- * during rendering.
- *
- * @class
- */
-import * as goog from '../../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.blockRendering.PreviousConnection');
+// Former goog.module ID: Blockly.blockRendering.PreviousConnection
 
 import type {RenderedConnection} from '../../rendered_connection.js';
 import type {ConstantProvider} from '../common/constants.js';
-
 import {Connection} from './connection.js';
 import {Types} from './types.js';
-
 
 /**
  * An object containing information about the space a previous connection takes
@@ -29,10 +20,11 @@ export class PreviousConnection extends Connection {
    * @param constants The rendering constants provider.
    * @param connectionModel The connection object on the block that this
    *     represents.
-   * @internal
    */
   constructor(
-      constants: ConstantProvider, connectionModel: RenderedConnection) {
+    constants: ConstantProvider,
+    connectionModel: RenderedConnection,
+  ) {
     super(constants, connectionModel);
     this.type |= Types.PREVIOUS_CONNECTION;
     this.height = this.shape.height as number;

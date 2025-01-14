@@ -4,13 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Methods for graphically rendering a marker as SVG.
- *
- * @class
- */
-import * as goog from '../../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.zelos.MarkerSvg');
+// Former goog.module ID: Blockly.zelos.MarkerSvg
 
 import type {BlockSvg} from '../../block_svg.js';
 import type {ASTNode} from '../../keyboard_nav/ast_node.js';
@@ -21,9 +15,7 @@ import {Svg} from '../../utils/svg.js';
 import type {WorkspaceSvg} from '../../workspace_svg.js';
 import type {ConstantProvider as BaseConstantProvider} from '../common/constants.js';
 import {MarkerSvg as BaseMarkerSvg} from '../common/marker_svg.js';
-
 import type {ConstantProvider as ZelosConstantProvider} from './constants.js';
-
 
 /**
  * Class to draw a marker.
@@ -32,7 +24,7 @@ export class MarkerSvg extends BaseMarkerSvg {
   // TODO(b/109816955): remove '!', see go/strict-prop-init-fix.
   constants_!: ZelosConstantProvider;
 
-  private markerCircle_: SVGCircleElement|null = null;
+  private markerCircle: SVGCircleElement | null = null;
 
   /**
    * @param workspace The workspace the marker belongs to.
@@ -40,8 +32,10 @@ export class MarkerSvg extends BaseMarkerSvg {
    * @param marker The marker to draw.
    */
   constructor(
-      workspace: WorkspaceSvg, constants: BaseConstantProvider,
-      marker: Marker) {
+    workspace: WorkspaceSvg,
+    constants: BaseConstantProvider,
+    marker: Marker,
+  ) {
     super(workspace, constants, marker);
   }
 
@@ -50,22 +44,22 @@ export class MarkerSvg extends BaseMarkerSvg {
    *
    * @param curNode The node to draw the marker for.
    */
-  private showWithInputOutput_(curNode: ASTNode) {
+  private showWithInputOutput(curNode: ASTNode) {
     const block = curNode.getSourceBlock() as BlockSvg;
     const connection = curNode.getLocation() as RenderedConnection;
     const offsetInBlock = connection.getOffsetInBlock();
 
-    this.positionCircle_(offsetInBlock.x, offsetInBlock.y);
+    this.positionCircle(offsetInBlock.x, offsetInBlock.y);
     this.setParent_(block);
     this.showCurrent_();
   }
 
   override showWithOutput_(curNode: ASTNode) {
-    this.showWithInputOutput_(curNode);
+    this.showWithInputOutput(curNode);
   }
 
   override showWithInput_(curNode: ASTNode) {
-    this.showWithInputOutput_(curNode);
+    this.showWithInputOutput(curNode);
   }
 
   /**
@@ -91,16 +85,16 @@ export class MarkerSvg extends BaseMarkerSvg {
    * @param x The x position of the circle.
    * @param y The y position of the circle.
    */
-  private positionCircle_(x: number, y: number) {
-    this.markerCircle_?.setAttribute('cx', x.toString());
-    this.markerCircle_?.setAttribute('cy', y.toString());
-    this.currentMarkerSvg = this.markerCircle_;
+  private positionCircle(x: number, y: number) {
+    this.markerCircle?.setAttribute('cx', `${x}`);
+    this.markerCircle?.setAttribute('cy', `${y}`);
+    this.currentMarkerSvg = this.markerCircle;
   }
 
   override hide() {
     super.hide();
-    if (this.markerCircle_) {
-      this.markerCircle_.style.display = 'none';
+    if (this.markerCircle) {
+      this.markerCircle.style.display = 'none';
     }
   }
 
@@ -117,18 +111,20 @@ export class MarkerSvg extends BaseMarkerSvg {
     /* clang-format on */
     super.createDomInternal_();
 
-    this.markerCircle_ = dom.createSvgElement(
-        Svg.CIRCLE, {
-          'r': this.constants_.CURSOR_RADIUS,
-          'style': 'display: none',
-          'stroke-width': this.constants_.CURSOR_STROKE_WIDTH,
-        },
-        this.markerSvg_);
+    this.markerCircle = dom.createSvgElement(
+      Svg.CIRCLE,
+      {
+        'r': this.constants_.CURSOR_RADIUS,
+        'stroke-width': this.constants_.CURSOR_STROKE_WIDTH,
+      },
+      this.markerSvg_,
+    );
+    this.hide();
 
     // Markers and stack cursors don't blink.
     if (this.isCursor()) {
       const blinkProperties = this.getBlinkProperties_();
-      dom.createSvgElement(Svg.ANIMATE, blinkProperties, this.markerCircle_!);
+      dom.createSvgElement(Svg.ANIMATE, blinkProperties, this.markerCircle!);
     }
 
     return this.markerSvg_!;
@@ -137,12 +133,12 @@ export class MarkerSvg extends BaseMarkerSvg {
   override applyColour_(curNode: ASTNode) {
     super.applyColour_(curNode);
 
-    this.markerCircle_?.setAttribute('fill', this.colour_);
-    this.markerCircle_?.setAttribute('stroke', this.colour_);
+    this.markerCircle?.setAttribute('fill', this.colour_);
+    this.markerCircle?.setAttribute('stroke', this.colour_);
 
     if (this.isCursor()) {
       const values = this.colour_ + ';transparent;transparent;';
-      this.markerCircle_?.firstElementChild!.setAttribute('values', values);
+      this.markerCircle?.firstElementChild!.setAttribute('values', values);
     }
   }
 }

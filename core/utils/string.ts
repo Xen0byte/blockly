@@ -4,34 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Utility methods for string manipulation.
- * These methods are not specific to Blockly, and could be factored out into
- * a JavaScript framework such as Closure.
- *
- * @namespace Blockly.utils.string
- */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.utils.string');
-
-import * as deprecation from './deprecation.js';
-
-
-/**
- * Fast prefix-checker.
- * Copied from Closure's goog.string.startsWith.
- *
- * @param str The string to check.
- * @param prefix A string to look for at the start of `str`.
- * @returns True if `str` begins with `prefix`.
- * @deprecated Use built-in **string.startsWith** instead.
- */
-export function startsWith(str: string, prefix: string): boolean {
-  deprecation.warn(
-      'Blockly.utils.string.startsWith()', 'April 2022', 'April 2023',
-      'Use built-in string.startsWith');
-  return str.startsWith(prefix);
-}
+// Former goog.module ID: Blockly.utils.string
 
 /**
  * Given an array of strings, return the length of the shortest one.
@@ -43,11 +16,9 @@ export function shortestStringLength(array: string[]): number {
   if (!array.length) {
     return 0;
   }
-  return array
-      .reduce(function(a, b) {
-        return a.length < b.length ? a : b;
-      })
-      .length;
+  return array.reduce(function (a, b) {
+    return a.length < b.length ? a : b;
+  }).length;
 }
 
 /**
@@ -59,7 +30,9 @@ export function shortestStringLength(array: string[]): number {
  * @returns Length of common prefix.
  */
 export function commonWordPrefix(
-    array: string[], opt_shortest?: number): number {
+  array: string[],
+  opt_shortest?: number,
+): number {
   if (!array.length) {
     return 0;
   } else if (array.length === 1) {
@@ -97,7 +70,9 @@ export function commonWordPrefix(
  * @returns Length of common suffix.
  */
 export function commonWordSuffix(
-    array: string[], opt_shortest?: number): number {
+  array: string[],
+  opt_shortest?: number,
+): number {
   if (!array.length) {
     return 0;
   } else if (array.length === 1) {
@@ -200,7 +175,10 @@ function wrapLine(text: string, limit: number): string {
  * @returns Larger the better.
  */
 function wrapScore(
-    words: string[], wordBreaks: boolean[], limit: number): number {
+  words: string[],
+  wordBreaks: boolean[],
+  limit: number,
+): number {
   // If this function becomes a performance liability, add caching.
   // Compute the length of each line.
   const lineLengths = [0];
@@ -226,9 +204,9 @@ function wrapScore(
     score -= Math.pow(maxLength - lineLengths[i], 1.5);
     // Optimize for structure.
     // Add score to line endings after punctuation.
-    if ('.?!'.indexOf(linePunctuation[i]) !== -1) {
+    if ('.?!'.includes(linePunctuation[i])) {
       score += limit / 3;
-    } else if (',;)]}'.indexOf(linePunctuation[i]) !== -1) {
+    } else if (',;)]}'.includes(linePunctuation[i])) {
       score += limit / 4;
     }
   }
@@ -236,9 +214,10 @@ function wrapScore(
   // previous line.  For example, this looks wrong:
   // aaa bbb
   // ccc ddd eee
-  if (lineLengths.length > 1 &&
-      lineLengths[lineLengths.length - 1] <=
-          lineLengths[lineLengths.length - 2]) {
+  if (
+    lineLengths.length > 1 &&
+    lineLengths[lineLengths.length - 1] <= lineLengths[lineLengths.length - 2]
+  ) {
     score += 0.5;
   }
   return score;
@@ -253,7 +232,10 @@ function wrapScore(
  * @returns New array of optimal line breaks.
  */
 function wrapMutate(
-    words: string[], wordBreaks: boolean[], limit: number): boolean[] {
+  words: string[],
+  wordBreaks: boolean[],
+  limit: number,
+): boolean[] {
   let bestScore = wrapScore(words, wordBreaks, limit);
   let bestBreaks;
   // Try shifting every line break forward or backward.
@@ -261,7 +243,7 @@ function wrapMutate(
     if (wordBreaks[i] === wordBreaks[i + 1]) {
       continue;
     }
-    const mutatedWordBreaks = (new Array<boolean>()).concat(wordBreaks);
+    const mutatedWordBreaks = new Array<boolean>().concat(wordBreaks);
     mutatedWordBreaks[i] = !mutatedWordBreaks[i];
     mutatedWordBreaks[i + 1] = !mutatedWordBreaks[i + 1];
     const mutatedScore = wrapScore(words, mutatedWordBreaks, limit);

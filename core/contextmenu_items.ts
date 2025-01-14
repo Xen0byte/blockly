@@ -4,25 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Registers default context menu items.
- *
- * @namespace Blockly.ContextMenuItems
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.ContextMenuItems');
+// Former goog.module ID: Blockly.ContextMenuItems
 
 import type {BlockSvg} from './block_svg.js';
 import * as clipboard from './clipboard.js';
-import {ContextMenuRegistry, RegistryItem, Scope} from './contextmenu_registry.js';
+import {RenderedWorkspaceComment} from './comments/rendered_workspace_comment.js';
+import * as common from './common.js';
+import {MANUALLY_DISABLED} from './constants.js';
+import {
+  ContextMenuRegistry,
+  RegistryItem,
+  Scope,
+} from './contextmenu_registry.js';
 import * as dialog from './dialog.js';
 import * as Events from './events/events.js';
 import * as eventUtils from './events/utils.js';
-import {inputTypes} from './input_types.js';
+import {CommentIcon} from './icons/comment_icon.js';
 import {Msg} from './msg.js';
-import * as idGenerator from './utils/idgenerator.js';
+import {StatementInput} from './renderers/zelos/zelos.js';
+import {Coordinate} from './utils/coordinate.js';
 import type {WorkspaceSvg} from './workspace_svg.js';
-
 
 /**
  * Option to undo previous action.
@@ -117,7 +118,7 @@ function toggleOption_(shouldCollapse: boolean, topBlocks: BlockSvg[]) {
   }
   Events.setGroup(true);
   for (let i = 0; i < topBlocks.length; i++) {
-    let block: BlockSvg|null = topBlocks[i];
+    let block: BlockSvg | null = topBlocks[i];
     while (block) {
       timeoutCounter++;
       setTimeout(timeoutFn.bind(null, block), ms);
@@ -139,7 +140,7 @@ export function registerCollapse() {
       if (scope.workspace!.options.collapse) {
         const topBlocks = scope.workspace!.getTopBlocks(false);
         for (let i = 0; i < topBlocks.length; i++) {
-          let block: BlockSvg|null = topBlocks[i];
+          let block: BlockSvg | null = topBlocks[i];
           while (block) {
             if (!block.isCollapsed()) {
               return 'enabled';
@@ -173,7 +174,7 @@ export function registerExpand() {
       if (scope.workspace!.options.collapse) {
         const topBlocks = scope.workspace!.getTopBlocks(false);
         for (let i = 0; i < topBlocks.length; i++) {
-          let block: BlockSvg|null = topBlocks[i];
+          let block: BlockSvg | null = topBlocks[i];
           while (block) {
             if (block.isCollapsed()) {
               return 'enabled';
@@ -230,13 +231,18 @@ function getDeletableBlocks_(workspace: WorkspaceSvg): BlockSvg[] {
 /**
  * Deletes the given blocks. Used to delete all blocks in the workspace.
  *
- * @param deleteList list of blocks to delete.
- * @param eventGroup event group ID with which all delete events should be
- *     associated.
+ * @param deleteList List of blocks to delete.
+ * @param eventGroup Event group ID with which all delete events should be
+ *     associated.  If not specified, create a new group.
  */
-function deleteNext_(deleteList: BlockSvg[], eventGroup: string) {
+function deleteNext_(deleteList: BlockSvg[], eventGroup?: string) {
   const DELAY = 10;
-  eventUtils.setGroup(eventGroup);
+  if (eventGroup) {
+    eventUtils.setGroup(eventGroup);
+  } else {
+    eventUtils.setGroup(true);
+    eventGroup = eventUtils.getGroup();
+  }
   const block = deleteList.shift();
   if (block) {
     if (!block.isDeadOrDying()) {
@@ -261,10 +267,8 @@ export function registerDeleteAll() {
       const deletableBlocksLength = getDeletableBlocks_(scope.workspace).length;
       if (deletableBlocksLength === 1) {
         return Msg['DELETE_BLOCK'];
-      } else {
-        return Msg['DELETE_X_BLOCKS'].replace(
-            '%1', String(deletableBlocksLength));
       }
+      return Msg['DELETE_X_BLOCKS'].replace('%1', `${deletableBlocksLength}`);
     },
     preconditionFn(scope: Scope) {
       if (!scope.workspace) {
@@ -279,18 +283,20 @@ export function registerDeleteAll() {
       }
       scope.workspace.cancelCurrentGesture();
       const deletableBlocks = getDeletableBlocks_(scope.workspace);
-      const eventGroup = idGenerator.genUid();
       if (deletableBlocks.length < 2) {
-        deleteNext_(deletableBlocks, eventGroup);
+        deleteNext_(deletableBlocks);
       } else {
         dialog.confirm(
-            Msg['DELETE_ALL_BLOCKS'].replace(
-                '%1', String(deletableBlocks.length)),
-            function(ok) {
-              if (ok) {
-                deleteNext_(deletableBlocks, eventGroup);
-              }
-            });
+          Msg['DELETE_ALL_BLOCKS'].replace(
+            '%1',
+            String(deletableBlocks.length),
+          ),
+          function (ok) {
+            if (ok) {
+              deleteNext_(deletableBlocks);
+            }
+          },
+        );
       }
     },
     scopeType: ContextMenuRegistry.ScopeType.WORKSPACE,
@@ -328,9 +334,10 @@ export function registerDuplicate() {
       return 'hidden';
     },
     callback(scope: Scope) {
-      if (scope.block) {
-        clipboard.duplicate(scope.block);
-      }
+      if (!scope.block) return;
+      const data = scope.block.toCopyData();
+      if (!data) return;
+      clipboard.paste(data, scope.block.workspace);
     },
     scopeType: ContextMenuRegistry.ScopeType.BLOCK,
     id: 'blockDuplicate',
@@ -345,7 +352,7 @@ export function registerDuplicate() {
 export function registerComment() {
   const commentOption: RegistryItem = {
     displayText(scope: Scope) {
-      if (scope.block!.getCommentIcon()) {
+      if (scope.block!.hasIcon(CommentIcon.TYPE)) {
         // If there's already a comment,  option is to remove.
         return Msg['REMOVE_COMMENT'];
       }
@@ -354,15 +361,19 @@ export function registerComment() {
     },
     preconditionFn(scope: Scope) {
       const block = scope.block;
-      if (!block!.isInFlyout && block!.workspace.options.comments &&
-          !block!.isCollapsed() && block!.isEditable()) {
+      if (
+        !block!.isInFlyout &&
+        block!.workspace.options.comments &&
+        !block!.isCollapsed() &&
+        block!.isEditable()
+      ) {
         return 'enabled';
       }
       return 'hidden';
     },
     callback(scope: Scope) {
       const block = scope.block;
-      if (block!.getCommentIcon()) {
+      if (block!.hasIcon(CommentIcon.TYPE)) {
         block!.setCommentText(null);
       } else {
         block!.setCommentText('');
@@ -381,8 +392,9 @@ export function registerComment() {
 export function registerInline() {
   const inlineOption: RegistryItem = {
     displayText(scope: Scope) {
-      return scope.block!.getInputsInline() ? Msg['EXTERNAL_INPUTS'] :
-                                              Msg['INLINE_INPUTS'];
+      return scope.block!.getInputsInline()
+        ? Msg['EXTERNAL_INPUTS']
+        : Msg['INLINE_INPUTS'];
     },
     preconditionFn(scope: Scope) {
       const block = scope.block;
@@ -390,8 +402,10 @@ export function registerInline() {
         for (let i = 1; i < block!.inputList.length; i++) {
           // Only display this option if there are two value or dummy inputs
           // next to each other.
-          if (block!.inputList[i - 1].type !== inputTypes.STATEMENT &&
-              block!.inputList[i].type !== inputTypes.STATEMENT) {
+          if (
+            !(block!.inputList[i - 1] instanceof StatementInput) &&
+            !(block!.inputList[i] instanceof StatementInput)
+          ) {
             return 'enabled';
           }
         }
@@ -414,13 +428,17 @@ export function registerInline() {
 export function registerCollapseExpandBlock() {
   const collapseExpandOption: RegistryItem = {
     displayText(scope: Scope) {
-      return scope.block!.isCollapsed() ? Msg['EXPAND_BLOCK'] :
-                                          Msg['COLLAPSE_BLOCK'];
+      return scope.block!.isCollapsed()
+        ? Msg['EXPAND_BLOCK']
+        : Msg['COLLAPSE_BLOCK'];
     },
     preconditionFn(scope: Scope) {
       const block = scope.block;
-      if (!block!.isInFlyout && block!.isMovable() &&
-          block!.workspace.options.collapse) {
+      if (
+        !block!.isInFlyout &&
+        block!.isMovable() &&
+        block!.workspace.options.collapse
+      ) {
         return 'enabled';
       }
       return 'hidden';
@@ -441,14 +459,25 @@ export function registerCollapseExpandBlock() {
 export function registerDisable() {
   const disableOption: RegistryItem = {
     displayText(scope: Scope) {
-      return scope.block!.isEnabled() ? Msg['DISABLE_BLOCK'] :
-                                        Msg['ENABLE_BLOCK'];
+      return scope.block!.hasDisabledReason(MANUALLY_DISABLED)
+        ? Msg['ENABLE_BLOCK']
+        : Msg['DISABLE_BLOCK'];
     },
     preconditionFn(scope: Scope) {
       const block = scope.block;
-      if (!block!.isInFlyout && block!.workspace.options.disable &&
-          block!.isEditable()) {
-        if (block!.getInheritedDisabled()) {
+      if (
+        !block!.isInFlyout &&
+        block!.workspace.options.disable &&
+        block!.isEditable()
+      ) {
+        // Determine whether this block is currently disabled for any reason
+        // other than the manual reason that this context menu item controls.
+        const disabledReasons = block!.getDisabledReasons();
+        const isDisabledForOtherReason =
+          disabledReasons.size >
+          (disabledReasons.has(MANUALLY_DISABLED) ? 1 : 0);
+
+        if (block!.getInheritedDisabled() || isDisabledForOtherReason) {
           return 'disabled';
         }
         return 'enabled';
@@ -457,14 +486,15 @@ export function registerDisable() {
     },
     callback(scope: Scope) {
       const block = scope.block;
-      const group = eventUtils.getGroup();
-      if (!group) {
+      const existingGroup = eventUtils.getGroup();
+      if (!existingGroup) {
         eventUtils.setGroup(true);
       }
-      block!.setEnabled(!block!.isEnabled());
-      if (!group) {
-        eventUtils.setGroup(false);
-      }
+      block!.setDisabledReason(
+        !block!.hasDisabledReason(MANUALLY_DISABLED),
+        MANUALLY_DISABLED,
+      );
+      eventUtils.setGroup(existingGroup);
     },
     scopeType: ContextMenuRegistry.ScopeType.BLOCK,
     id: 'blockDisable',
@@ -487,9 +517,9 @@ export function registerDelete() {
         // Blocks in the current stack would survive this block's deletion.
         descendantCount -= nextBlock.getDescendants(false).length;
       }
-      return descendantCount === 1 ?
-          Msg['DELETE_BLOCK'] :
-          Msg['DELETE_X_BLOCKS'].replace('%1', String(descendantCount));
+      return descendantCount === 1
+        ? Msg['DELETE_BLOCK']
+        : Msg['DELETE_X_BLOCKS'].replace('%1', `${descendantCount}`);
     },
     preconditionFn(scope: Scope) {
       if (!scope.block!.isInFlyout && scope.block!.isDeletable()) {
@@ -519,8 +549,10 @@ export function registerHelp() {
     },
     preconditionFn(scope: Scope) {
       const block = scope.block;
-      const url = typeof block!.helpUrl === 'function' ? block!.helpUrl() :
-                                                         block!.helpUrl;
+      const url =
+        typeof block!.helpUrl === 'function'
+          ? block!.helpUrl()
+          : block!.helpUrl;
       if (url) {
         return 'enabled';
       }
@@ -536,6 +568,108 @@ export function registerHelp() {
   ContextMenuRegistry.registry.register(helpOption);
 }
 
+/** Registers an option for deleting a workspace comment. */
+export function registerCommentDelete() {
+  const deleteOption: RegistryItem = {
+    displayText: () => Msg['REMOVE_COMMENT'],
+    preconditionFn(scope: Scope) {
+      return scope.comment?.isDeletable() ? 'enabled' : 'hidden';
+    },
+    callback(scope: Scope) {
+      eventUtils.setGroup(true);
+      scope.comment?.dispose();
+      eventUtils.setGroup(false);
+    },
+    scopeType: ContextMenuRegistry.ScopeType.COMMENT,
+    id: 'commentDelete',
+    weight: 6,
+  };
+  ContextMenuRegistry.registry.register(deleteOption);
+}
+
+/** Registers an option for duplicating a workspace comment. */
+export function registerCommentDuplicate() {
+  const duplicateOption: RegistryItem = {
+    displayText: () => Msg['DUPLICATE_COMMENT'],
+    preconditionFn(scope: Scope) {
+      return scope.comment?.isMovable() ? 'enabled' : 'hidden';
+    },
+    callback(scope: Scope) {
+      if (!scope.comment) return;
+      const data = scope.comment.toCopyData();
+      if (!data) return;
+      clipboard.paste(data, scope.comment.workspace);
+    },
+    scopeType: ContextMenuRegistry.ScopeType.COMMENT,
+    id: 'commentDuplicate',
+    weight: 1,
+  };
+  ContextMenuRegistry.registry.register(duplicateOption);
+}
+
+/** Registers an option for adding a workspace comment to the workspace. */
+export function registerCommentCreate() {
+  const createOption: RegistryItem = {
+    displayText: () => Msg['ADD_COMMENT'],
+    preconditionFn: (scope: Scope) => {
+      return scope.workspace?.isMutator ? 'hidden' : 'enabled';
+    },
+    callback: (scope: Scope, e: PointerEvent) => {
+      const workspace = scope.workspace;
+      if (!workspace) return;
+      eventUtils.setGroup(true);
+      const comment = new RenderedWorkspaceComment(workspace);
+      comment.setText(Msg['WORKSPACE_COMMENT_DEFAULT_TEXT']);
+      comment.moveTo(
+        pixelsToWorkspaceCoords(
+          new Coordinate(e.clientX, e.clientY),
+          workspace,
+        ),
+      );
+      common.setSelected(comment);
+      eventUtils.setGroup(false);
+    },
+    scopeType: ContextMenuRegistry.ScopeType.WORKSPACE,
+    id: 'commentCreate',
+    weight: 8,
+  };
+  ContextMenuRegistry.registry.register(createOption);
+}
+
+/**
+ * Converts pixel coordinates (relative to the window) to workspace coordinates.
+ */
+function pixelsToWorkspaceCoords(
+  pixelCoord: Coordinate,
+  workspace: WorkspaceSvg,
+): Coordinate {
+  const injectionDiv = workspace.getInjectionDiv();
+  // Bounding rect coordinates are in client coordinates, meaning that they
+  // are in pixels relative to the upper left corner of the visible browser
+  // window.  These coordinates change when you scroll the browser window.
+  const boundingRect = injectionDiv.getBoundingClientRect();
+
+  // The client coordinates offset by the injection div's upper left corner.
+  const clientOffsetPixels = new Coordinate(
+    pixelCoord.x - boundingRect.left,
+    pixelCoord.y - boundingRect.top,
+  );
+
+  // The offset in pixels between the main workspace's origin and the upper
+  // left corner of the injection div.
+  const mainOffsetPixels = workspace.getOriginOffsetInPixels();
+
+  // The position of the new comment in pixels relative to the origin of the
+  // main workspace.
+  const finalOffset = Coordinate.difference(
+    clientOffsetPixels,
+    mainOffsetPixels,
+  );
+  // The position of the new comment in main workspace coordinates.
+  finalOffset.scale(1 / workspace.scale);
+  return finalOffset;
+}
+
 /** Registers all block-scoped context menu items. */
 function registerBlockOptions_() {
   registerDuplicate();
@@ -545,6 +679,13 @@ function registerBlockOptions_() {
   registerDisable();
   registerDelete();
   registerHelp();
+}
+
+/** Registers all workspace comment related menu items. */
+export function registerCommentOptions() {
+  registerCommentDuplicate();
+  registerCommentDelete();
+  registerCommentCreate();
 }
 
 /**

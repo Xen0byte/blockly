@@ -4,39 +4,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Handles serializing blocks to plain JavaScript objects only containing state.
- *
- * @namespace Blockly.serialization.blocks
- */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.serialization.blocks');
+// Former goog.module ID: Blockly.serialization.blocks
 
 import type {Block} from '../block.js';
 import type {BlockSvg} from '../block_svg.js';
 import type {Connection} from '../connection.js';
+import {MANUALLY_DISABLED} from '../constants.js';
+import {EventType} from '../events/type.js';
 import * as eventUtils from '../events/utils.js';
-import {inputTypes} from '../input_types.js';
+import {inputTypes} from '../inputs/input_types.js';
+import {isSerializable} from '../interfaces/i_serializable.js';
 import type {ISerializer} from '../interfaces/i_serializer.js';
-import {Size} from '../utils/size.js';
+import * as registry from '../registry.js';
+import * as renderManagement from '../render_management.js';
 import * as utilsXml from '../utils/xml.js';
+import {VariableModel} from '../variable_model.js';
+import * as Variables from '../variables.js';
 import type {Workspace} from '../workspace.js';
 import * as Xml from '../xml.js';
-
-import {BadConnectionCheck, MissingBlockType, MissingConnection, RealChildOfShadow} from './exceptions.js';
+import {
+  BadConnectionCheck,
+  MissingBlockType,
+  MissingConnection,
+  RealChildOfShadow,
+  UnregisteredIcon,
+} from './exceptions.js';
 import * as priorities from './priorities.js';
 import * as serializationRegistry from './registry.js';
-
-
-// TODO(#5160): Remove this once lint is fixed.
-/* eslint-disable no-use-before-define */
 
 /**
  * Represents the state of a connection.
  */
 export interface ConnectionState {
-  shadow: State|undefined;
-  block: State|undefined;
+  shadow?: State;
+  block?: State;
 }
 
 /**
@@ -48,7 +49,11 @@ export interface State {
   x?: number;
   y?: number;
   collapsed?: boolean;
+  deletable?: boolean;
+  movable?: boolean;
+  editable?: boolean;
   enabled?: boolean;
+  disabledReasons?: string[];
   inline?: boolean;
   data?: string;
   extraState?: AnyDuringMigration;
@@ -75,24 +80,28 @@ export interface State {
  * @returns The serialized state of the block, or null if the block could not be
  *     serialied (eg it was an insertion marker).
  */
-export function save(block: Block, {
-  addCoordinates = false,
-  addInputBlocks = true,
-  addNextBlocks = true,
-  doFullSerialization = true,
-}: {
-  addCoordinates?: boolean,
-  addInputBlocks?: boolean,
-  addNextBlocks?: boolean,
-  doFullSerialization?: boolean
-} = {}): State|null {
+export function save(
+  block: Block,
+  {
+    addCoordinates = false,
+    addInputBlocks = true,
+    addNextBlocks = true,
+    doFullSerialization = true,
+    saveIds = true,
+  }: {
+    addCoordinates?: boolean;
+    addInputBlocks?: boolean;
+    addNextBlocks?: boolean;
+    doFullSerialization?: boolean;
+    saveIds?: boolean;
+  } = {},
+): State | null {
   if (block.isInsertionMarker()) {
     return null;
   }
-
   const state = {
     'type': block.type,
-    'id': block.id,
+    'id': saveIds ? block.id : undefined,
   };
 
   if (addCoordinates) {
@@ -105,22 +114,32 @@ export function save(block: Block, {
   saveAttributes(block, state as AnyDuringMigration);
   // AnyDuringMigration because:  Argument of type '{ type: string; id: string;
   // }' is not assignable to parameter of type 'State'.
-  saveExtraState(block, state as AnyDuringMigration);
+  saveExtraState(block, state as AnyDuringMigration, doFullSerialization);
   // AnyDuringMigration because:  Argument of type '{ type: string; id: string;
   // }' is not assignable to parameter of type 'State'.
-  saveIcons(block, state as AnyDuringMigration);
+  saveIcons(block, state as AnyDuringMigration, doFullSerialization);
   // AnyDuringMigration because:  Argument of type '{ type: string; id: string;
   // }' is not assignable to parameter of type 'State'.
   saveFields(block, state as AnyDuringMigration, doFullSerialization);
   if (addInputBlocks) {
     // AnyDuringMigration because:  Argument of type '{ type: string; id:
     // string; }' is not assignable to parameter of type 'State'.
-    saveInputBlocks(block, state as AnyDuringMigration, doFullSerialization);
+    saveInputBlocks(
+      block,
+      state as AnyDuringMigration,
+      doFullSerialization,
+      saveIds,
+    );
   }
   if (addNextBlocks) {
     // AnyDuringMigration because:  Argument of type '{ type: string; id:
     // string; }' is not assignable to parameter of type 'State'.
-    saveNextBlocks(block, state as AnyDuringMigration, doFullSerialization);
+    saveNextBlocks(
+      block,
+      state as AnyDuringMigration,
+      doFullSerialization,
+      saveIds,
+    );
   }
 
   // AnyDuringMigration because:  Type '{ type: string; id: string; }' is not
@@ -140,10 +159,21 @@ function saveAttributes(block: Block, state: State) {
     state['collapsed'] = true;
   }
   if (!block.isEnabled()) {
-    state['enabled'] = false;
+    state['disabledReasons'] = Array.from(block.getDisabledReasons());
   }
-  if (block.inputsInline !== undefined &&
-      block.inputsInline !== block.inputsInlineDefault) {
+  if (!block.isOwnDeletable()) {
+    state['deletable'] = false;
+  }
+  if (!block.isOwnMovable()) {
+    state['movable'] = false;
+  }
+  if (!block.isOwnEditable()) {
+    state['editable'] = false;
+  }
+  if (
+    block.inputsInline !== undefined &&
+    block.inputsInline !== block.inputsInlineDefault
+  ) {
     state['inline'] = block.inputsInline;
   }
   // Data is a nullable string, so we don't need to worry about falsy values.
@@ -164,25 +194,32 @@ function saveCoords(block: Block, state: State) {
   state['x'] = Math.round(workspace.RTL ? workspace.getWidth() - xy.x : xy.x);
   state['y'] = Math.round(xy.y);
 }
+
 /**
  * Adds any extra state the block may provide to the given state object.
  *
  * @param block The block to serialize the extra state of.
  * @param state The state object to append to.
+ * @param doFullSerialization Whether or not to serialize the full state of the
+ *     extra state (rather than possibly saving a reference to some state).
  */
-function saveExtraState(block: Block, state: State) {
+function saveExtraState(
+  block: Block,
+  state: State,
+  doFullSerialization: boolean,
+) {
   if (block.saveExtraState) {
-    const extraState = block.saveExtraState();
+    const extraState = block.saveExtraState(doFullSerialization);
     if (extraState !== null) {
       state['extraState'] = extraState;
     }
   } else if (block.mutationToDom) {
     const extraState = block.mutationToDom();
     if (extraState !== null) {
-      state['extraState'] =
-          Xml.domToText(extraState)
-              .replace(
-                  ' xmlns="https://developers.google.com/blockly/xml"', '');
+      state['extraState'] = Xml.domToText(extraState).replace(
+        ' xmlns="https://developers.google.com/blockly/xml"',
+        '',
+      );
     }
   }
 }
@@ -192,18 +229,20 @@ function saveExtraState(block: Block, state: State) {
  *
  * @param block The block to serialize the icon state of.
  * @param state The state object to append to.
+ * @param doFullSerialization Whether or not to serialize the full state of the
+ *     icon (rather than possibly saving a reference to some state).
  */
-function saveIcons(block: Block, state: State) {
-  // TODO(#2105): Remove this logic and put it in the icon.
-  if (block.getCommentText()) {
-    state['icons'] = {
-      'comment': {
-        'text': block.getCommentText(),
-        'pinned': block.commentModel.pinned,
-        'height': Math.round(block.commentModel.size.height),
-        'width': Math.round(block.commentModel.size.width),
-      },
-    };
+function saveIcons(block: Block, state: State, doFullSerialization: boolean) {
+  const icons = Object.create(null);
+  for (const icon of block.getIcons()) {
+    if (isSerializable(icon)) {
+      const state = icon.saveState(doFullSerialization);
+      if (state) icons[icon.getType().toString()] = state;
+    }
+  }
+
+  if (Object.keys(icons).length) {
+    state['icons'] = icons;
   }
 }
 
@@ -240,15 +279,20 @@ function saveFields(block: Block, state: State, doFullSerialization: boolean) {
  * @param doFullSerialization Whether or not to do full serialization.
  */
 function saveInputBlocks(
-    block: Block, state: State, doFullSerialization: boolean) {
+  block: Block,
+  state: State,
+  doFullSerialization: boolean,
+  saveIds: boolean,
+) {
   const inputs = Object.create(null);
   for (let i = 0; i < block.inputList.length; i++) {
     const input = block.inputList[i];
-    if (input.type === inputTypes.DUMMY) {
-      continue;
-    }
-    const connectionState =
-        saveConnection(input.connection as Connection, doFullSerialization);
+    if (!input.connection) continue;
+    const connectionState = saveConnection(
+      input.connection as Connection,
+      doFullSerialization,
+      saveIds,
+    );
     if (connectionState) {
       inputs[input.name] = connectionState;
     }
@@ -268,12 +312,19 @@ function saveInputBlocks(
  * @param doFullSerialization Whether or not to do full serialization.
  */
 function saveNextBlocks(
-    block: Block, state: State, doFullSerialization: boolean) {
+  block: Block,
+  state: State,
+  doFullSerialization: boolean,
+  saveIds: boolean,
+) {
   if (!block.nextConnection) {
     return;
   }
-  const connectionState =
-      saveConnection(block.nextConnection, doFullSerialization);
+  const connectionState = saveConnection(
+    block.nextConnection,
+    doFullSerialization,
+    saveIds,
+  );
   if (connectionState) {
     state['next'] = connectionState;
   }
@@ -288,8 +339,11 @@ function saveNextBlocks(
  *     connected real block.
  * @param doFullSerialization Whether or not to do full serialization.
  */
-function saveConnection(connection: Connection, doFullSerialization: boolean):
-    ConnectionState|null {
+function saveConnection(
+  connection: Connection,
+  doFullSerialization: boolean,
+  saveIds: boolean,
+): ConnectionState | null {
   const shadow = connection.getShadowState(true);
   const child = connection.targetBlock();
   if (!shadow && !child) {
@@ -300,7 +354,7 @@ function saveConnection(connection: Connection, doFullSerialization: boolean):
     state['shadow'] = shadow;
   }
   if (child && !child.isShadow()) {
-    state['block'] = save(child, {doFullSerialization});
+    state['block'] = save(child, {doFullSerialization, saveIds});
   }
   return state;
 }
@@ -315,9 +369,13 @@ function saveConnection(connection: Connection, doFullSerialization: boolean):
  * @returns The block that was just loaded.
  */
 export function append(
-    state: State, workspace: Workspace,
-    {recordUndo = false}: {recordUndo?: boolean} = {}): Block {
-  return appendInternal(state, workspace, {recordUndo});
+  state: State,
+  workspace: Workspace,
+  {recordUndo = false}: {recordUndo?: boolean} = {},
+): Block {
+  const block = appendInternal(state, workspace, {recordUndo});
+  if (workspace.rendered) renderManagement.triggerQueuedRenders();
+  return block;
 }
 
 /**
@@ -338,12 +396,18 @@ export function append(
  * @internal
  */
 export function appendInternal(
-    state: State, workspace: Workspace,
-    {parentConnection = undefined, isShadow = false, recordUndo = false}: {
-      parentConnection?: Connection,
-      isShadow?: boolean,
-      recordUndo?: boolean
-    } = {}): Block {
+  state: State,
+  workspace: Workspace,
+  {
+    parentConnection = undefined,
+    isShadow = false,
+    recordUndo = false,
+  }: {
+    parentConnection?: Connection;
+    isShadow?: boolean;
+    recordUndo?: boolean;
+  } = {},
+): Block {
   const prevRecordUndo = eventUtils.getRecordUndo();
   eventUtils.setRecordUndo(recordUndo);
   const existingGroup = eventUtils.getGroup();
@@ -352,10 +416,22 @@ export function appendInternal(
   }
   eventUtils.disable();
 
-  const block = appendPrivate(state, workspace, {parentConnection, isShadow});
+  const variablesBeforeCreation = workspace.getAllVariables();
+  let block;
+  try {
+    block = appendPrivate(state, workspace, {parentConnection, isShadow});
+  } finally {
+    eventUtils.enable();
+  }
 
-  eventUtils.enable();
-  eventUtils.fire(new (eventUtils.get(eventUtils.BLOCK_CREATE))(block));
+  // Fire a VarCreate event for each (if any) new variable created.
+  checkNewVariables(workspace, variablesBeforeCreation);
+
+  if (eventUtils.isEnabled()) {
+    // Block events come after var events, in case they refer to newly created
+    // variables.
+    eventUtils.fire(new (eventUtils.get(EventType.BLOCK_CREATE))(block));
+  }
   eventUtils.setGroup(existingGroup);
   eventUtils.setRecordUndo(prevRecordUndo);
 
@@ -388,9 +464,13 @@ export function appendInternal(
  * @returns The block that was just appended.
  */
 function appendPrivate(
-    state: State, workspace: Workspace,
-    {parentConnection = undefined, isShadow = false}:
-        {parentConnection?: Connection, isShadow?: boolean} = {}): Block {
+  state: State,
+  workspace: Workspace,
+  {
+    parentConnection = undefined,
+    isShadow = false,
+  }: {parentConnection?: Connection; isShadow?: boolean} = {},
+): Block {
   if (!state['type']) {
     throw new MissingBlockType(state);
   }
@@ -408,6 +488,31 @@ function appendPrivate(
   initBlock(block, workspace.rendered);
 
   return block;
+}
+
+/**
+ * Checks the workspace for any new variables that were created during the
+ * deserialization of a block and fires a VarCreate event for each.
+ *
+ * @param workspace The workspace where new variables are being created
+ * @param originalVariables The array of variables that existed in the workspace
+ *     before adding the new block.
+ */
+function checkNewVariables(
+  workspace: Workspace,
+  originalVariables: VariableModel[],
+) {
+  if (eventUtils.isEnabled()) {
+    const newVariables = Variables.getAddedVariables(
+      workspace,
+      originalVariables,
+    );
+    // Fire a VarCreate event for each (if any) new variable created.
+    for (let i = 0; i < newVariables.length; i++) {
+      const thisVariable = newVariables[i];
+      eventUtils.fire(new (eventUtils.get(EventType.VAR_CREATE))(thisVariable));
+    }
+  }
 }
 
 /**
@@ -437,8 +542,24 @@ function loadAttributes(block: Block, state: State) {
   if (state['collapsed']) {
     block.setCollapsed(true);
   }
+  if (state['deletable'] === false) {
+    block.setDeletable(false);
+  }
+  if (state['movable'] === false) {
+    block.setMovable(false);
+  }
+  if (state['editable'] === false) {
+    block.setEditable(false);
+  }
   if (state['enabled'] === false) {
-    block.setEnabled(false);
+    // Before May 2024 we just used 'enabled', with no reasons.
+    // Contiune to support this syntax.
+    block.setDisabledReason(true, MANUALLY_DISABLED);
+  }
+  if (Array.isArray(state['disabledReasons'])) {
+    for (const reason of state['disabledReasons']) {
+      block.setDisabledReason(true, reason);
+    }
   }
   if (state['inline'] !== undefined) {
     block.setInputsInline(state['inline']);
@@ -474,7 +595,10 @@ function loadExtraState(block: Block, state: State) {
  * @param state The state which defines the given block
  */
 function tryToConnectParent(
-    parentConnection: Connection|undefined, child: Block, state: State) {
+  parentConnection: Connection | undefined,
+  child: Block,
+  state: State,
+) {
   if (!parentConnection) {
     return;
   }
@@ -491,7 +615,8 @@ function tryToConnectParent(
       throw new MissingConnection('output', child, state);
     }
     connected = parentConnection.connect(childConnection);
-  } else {  // Statement type.
+  } else {
+    // Statement type.
     childConnection = child.previousConnection;
     if (!childConnection) {
       throw new MissingConnection('previous', child, state);
@@ -502,13 +627,17 @@ function tryToConnectParent(
   if (!connected) {
     const checker = child.workspace.connectionChecker;
     throw new BadConnectionCheck(
-        checker.getErrorMessage(
-            checker.canConnectWithReason(
-                childConnection, parentConnection, false),
-            childConnection, parentConnection),
-        parentConnection.type === inputTypes.VALUE ? 'output connection' :
-                                                     'previous connection',
-        child, state);
+      checker.getErrorMessage(
+        checker.canConnectWithReason(childConnection, parentConnection, false),
+        childConnection,
+        parentConnection,
+      ),
+      parentConnection.type === inputTypes.VALUE
+        ? 'output connection'
+        : 'previous connection',
+      child,
+      state,
+    );
   }
 }
 
@@ -520,25 +649,23 @@ function tryToConnectParent(
  * @param state The state object to reference.
  */
 function loadIcons(block: Block, state: State) {
-  if (!state['icons']) {
-    return;
-  }
-  // TODO(#2105): Remove this logic and put it in the icon.
-  const comment = state['icons']['comment'];
-  if (comment) {
-    block.setCommentText(comment['text']);
-    // Load if saved. (Cleaned unnecessary attributes when in the trashcan.)
-    if ('pinned' in comment) {
-      block.commentModel.pinned = comment['pinned'];
+  if (!state['icons']) return;
+
+  const iconTypes = Object.keys(state['icons']);
+  for (const iconType of iconTypes) {
+    const iconState = state['icons'][iconType];
+    let icon = block.getIcon(iconType);
+    if (!icon) {
+      const constructor = registry.getClass(
+        registry.Type.ICON,
+        iconType,
+        false,
+      );
+      if (!constructor) throw new UnregisteredIcon(iconType, block, state);
+      icon = new constructor(block);
+      block.addIcon(icon);
     }
-    if ('width' in comment && 'height' in comment) {
-      block.commentModel.size = new Size(comment['width'], comment['height']);
-    }
-    if (comment['pinned'] && block.rendered && !block.isInFlyout) {
-      // Give the block a chance to be positioned and rendered before showing.
-      const blockSvg = block as BlockSvg;
-      setTimeout(() => blockSvg.getCommentIcon()!.setVisible(true), 1);
-    }
+    if (isSerializable(icon)) icon.loadState(iconState);
   }
 }
 
@@ -559,7 +686,8 @@ function loadFields(block: Block, state: State) {
     const field = block.getField(fieldName);
     if (!field) {
       console.warn(
-          `Ignoring non-existant field ${fieldName} in block ${block.type}`);
+        `Ignoring non-existant field ${fieldName} in block ${block.type}`,
+      );
       continue;
     }
     field.loadState(fieldState);
@@ -613,14 +741,18 @@ function loadNextBlocks(block: Block, state: State) {
  *     shadow block, or any connected real block.
  */
 function loadConnection(
-    connection: Connection, connectionState: ConnectionState) {
+  connection: Connection,
+  connectionState: ConnectionState,
+) {
   if (connectionState['shadow']) {
     connection.setShadowState(connectionState['shadow']);
   }
   if (connectionState['block']) {
     appendPrivate(
-        connectionState['block'], connection.getSourceBlock().workspace,
-        {parentConnection: connection});
+      connectionState['block'],
+      connection.getSourceBlock().workspace,
+      {parentConnection: connection},
+    );
   }
 }
 
@@ -639,12 +771,12 @@ function initBlock(block: Block, rendered: boolean) {
     blockSvg.setConnectionTracking(false);
 
     blockSvg.initSvg();
-    blockSvg.render(false);
+    blockSvg.queueRender();
+
     // fixes #6076 JSO deserialization doesn't
     // set .iconXY_ property so here it will be set
-    const icons = blockSvg.getIcons();
-    for (let i = 0; i < icons.length; i++) {
-      icons[i].computeIconLocation();
+    for (const icon of blockSvg.getIcons()) {
+      icon.onLocationChange(blockSvg.getRelativeToSurfaceXY());
     }
   } else {
     block.initModel();
@@ -660,7 +792,6 @@ const saveBlock = save;
 export class BlockSerializer implements ISerializer {
   priority: number;
 
-  /* eslint-disable-next-line require-jsdoc */
   constructor() {
     /** The priority for deserializing blocks. */
     this.priority = priorities.BLOCKS;
@@ -673,18 +804,22 @@ export class BlockSerializer implements ISerializer {
    * @returns The state of the workspace's blocks, or null if there are no
    *     blocks.
    */
-  save(workspace: Workspace): {languageVersion: number, blocks: State[]}|null {
+  save(
+    workspace: Workspace,
+  ): {languageVersion: number; blocks: State[]} | null {
     const blockStates = [];
     for (const block of workspace.getTopBlocks(false)) {
-      const state =
-          saveBlock(block, {addCoordinates: true, doFullSerialization: false});
+      const state = saveBlock(block, {
+        addCoordinates: true,
+        doFullSerialization: false,
+      });
       if (state) {
         blockStates.push(state);
       }
     }
     if (blockStates.length) {
       return {
-        'languageVersion': 0,  // Currently unused.
+        'languageVersion': 0, // Currently unused.
         'blocks': blockStates,
       };
     }
@@ -699,7 +834,9 @@ export class BlockSerializer implements ISerializer {
    * @param workspace The workspace to deserialize into.
    */
   load(
-      state: {languageVersion: number, blocks: State[]}, workspace: Workspace) {
+    state: {languageVersion: number; blocks: State[]},
+    workspace: Workspace,
+  ) {
     const blockStates = state['blocks'];
     for (const state of blockStates) {
       append(state, workspace, {recordUndo: eventUtils.getRecordUndo()});

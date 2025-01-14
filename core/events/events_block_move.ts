@@ -9,19 +9,15 @@
  *
  * @class
  */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.Events.BlockMove');
+// Former goog.module ID: Blockly.Events.BlockMove
 
 import type {Block} from '../block.js';
 import {ConnectionType} from '../connection_type.js';
-import * as deprecation from '../utils/deprecation.js';
 import * as registry from '../registry.js';
 import {Coordinate} from '../utils/coordinate.js';
-
-import {BlockBase, BlockBaseJson} from './events_block_base.js';
-import * as eventUtils from './utils.js';
 import type {Workspace} from '../workspace.js';
-
+import {BlockBase, BlockBaseJson} from './events_block_base.js';
+import {EventType} from './type.js';
 
 interface BlockLocation {
   parentId?: string;
@@ -34,7 +30,7 @@ interface BlockLocation {
  * connection to another, or from one location on the workspace to another.
  */
 export class BlockMove extends BlockBase {
-  override type = eventUtils.BLOCK_MOVE;
+  override type = EventType.BLOCK_MOVE;
 
   /** The ID of the old parent block. Undefined if it was a top-level block. */
   oldParentId?: string;
@@ -61,10 +57,24 @@ export class BlockMove extends BlockBase {
   newInputName?: string;
 
   /**
-   * The new X and Y workspace coordinates of the block if it is a top level
+   * The new X and Y workspace coordinates of the block if it is a top-level
    * block. Undefined if it is not a top level block.
    */
   newCoordinate?: Coordinate;
+
+  /**
+   * An explanation of what this move is for.  Known values include:
+   *  'drag' -- A drag operation completed.
+   *  'bump' -- Block got bumped away from an invalid connection.
+   *  'snap' -- Block got shifted to line up with the grid.
+   *  'inbounds' -- Block got pushed back into a non-scrolling workspace.
+   *  'connect' -- Block got connected to another block.
+   *  'disconnect' -- Block got disconnected from another block.
+   *  'create' -- Block created via XML.
+   *  'cleanup' -- Workspace aligned top-level blocks.
+   * Event merging may create multiple reasons: ['drag', 'bump', 'snap'].
+   */
+  reason?: string[];
 
   /** @param opt_block The moved block.  Undefined for a blank event. */
   constructor(opt_block?: Block) {
@@ -79,7 +89,7 @@ export class BlockMove extends BlockBase {
       this.recordUndo = false;
     }
 
-    const location = this.currentLocation_();
+    const location = this.currentLocation();
     this.oldParentId = location.parentId;
     this.oldInputName = location.inputName;
     this.oldCoordinate = location.coordinate;
@@ -95,46 +105,24 @@ export class BlockMove extends BlockBase {
     json['oldParentId'] = this.oldParentId;
     json['oldInputName'] = this.oldInputName;
     if (this.oldCoordinate) {
-      json['oldCoordinate'] = `${Math.round(this.oldCoordinate.x)}, ` +
-          `${Math.round(this.oldCoordinate.y)}`;
+      json['oldCoordinate'] =
+        `${Math.round(this.oldCoordinate.x)}, ` +
+        `${Math.round(this.oldCoordinate.y)}`;
     }
     json['newParentId'] = this.newParentId;
     json['newInputName'] = this.newInputName;
     if (this.newCoordinate) {
-      json['newCoordinate'] = `${Math.round(this.newCoordinate.x)}, ` +
-          `${Math.round(this.newCoordinate.y)}`;
+      json['newCoordinate'] =
+        `${Math.round(this.newCoordinate.x)}, ` +
+        `${Math.round(this.newCoordinate.y)}`;
+    }
+    if (this.reason) {
+      json['reason'] = this.reason;
     }
     if (!this.recordUndo) {
       json['recordUndo'] = this.recordUndo;
     }
     return json;
-  }
-
-  /**
-   * Decode the JSON event.
-   *
-   * @param json JSON representation.
-   */
-  override fromJson(json: BlockMoveJson) {
-    deprecation.warn(
-        'Blockly.Events.BlockMove.prototype.fromJson', 'version 9',
-        'version 10', 'Blockly.Events.fromJson');
-    super.fromJson(json);
-    this.oldParentId = json['oldParentId'];
-    this.oldInputName = json['oldInputName'];
-    if (json['oldCoordinate']) {
-      const xy = json['oldCoordinate'].split(',');
-      this.oldCoordinate = new Coordinate(Number(xy[0]), Number(xy[1]));
-    }
-    this.newParentId = json['newParentId'];
-    this.newInputName = json['newInputName'];
-    if (json['newCoordinate']) {
-      const xy = json['newCoordinate'].split(',');
-      this.newCoordinate = new Coordinate(Number(xy[0]), Number(xy[1]));
-    }
-    if (json['recordUndo'] !== undefined) {
-      this.recordUndo = json['recordUndo'];
-    }
   }
 
   /**
@@ -146,10 +134,16 @@ export class BlockMove extends BlockBase {
    *     static methods in superclasses.
    * @internal
    */
-  static fromJson(json: BlockMoveJson, workspace: Workspace, event?: any):
-      BlockMove {
-    const newEvent =
-        super.fromJson(json, workspace, event ?? new BlockMove()) as BlockMove;
+  static fromJson(
+    json: BlockMoveJson,
+    workspace: Workspace,
+    event?: any,
+  ): BlockMove {
+    const newEvent = super.fromJson(
+      json,
+      workspace,
+      event ?? new BlockMove(),
+    ) as BlockMove;
     newEvent.oldParentId = json['oldParentId'];
     newEvent.oldInputName = json['oldInputName'];
     if (json['oldCoordinate']) {
@@ -162,6 +156,9 @@ export class BlockMove extends BlockBase {
       const xy = json['newCoordinate'].split(',');
       newEvent.newCoordinate = new Coordinate(Number(xy[0]), Number(xy[1]));
     }
+    if (json['reason'] !== undefined) {
+      newEvent.reason = json['reason'];
+    }
     if (json['recordUndo'] !== undefined) {
       newEvent.recordUndo = json['recordUndo'];
     }
@@ -170,10 +167,19 @@ export class BlockMove extends BlockBase {
 
   /** Record the block's new location.  Called after the move. */
   recordNew() {
-    const location = this.currentLocation_();
+    const location = this.currentLocation();
     this.newParentId = location.parentId;
     this.newInputName = location.inputName;
     this.newCoordinate = location.coordinate;
+  }
+
+  /**
+   * Set the reason for a move event.
+   *
+   * @param reason Why is this move happening?  'drag', 'bump', 'snap', ...
+   */
+  setReason(reason: string[]) {
+    this.reason = reason;
   }
 
   /**
@@ -182,18 +188,20 @@ export class BlockMove extends BlockBase {
    *
    * @returns Collection of location info.
    */
-  private currentLocation_(): BlockLocation {
+  private currentLocation(): BlockLocation {
     const workspace = this.getEventWorkspace_();
     if (!this.blockId) {
       throw new Error(
-          'The block ID is undefined. Either pass a block to ' +
-          'the constructor, or call fromJson');
+        'The block ID is undefined. Either pass a block to ' +
+          'the constructor, or call fromJson',
+      );
     }
     const block = workspace.getBlockById(this.blockId);
     if (!block) {
       throw new Error(
-          'The block associated with the block move event ' +
-          'could not be found');
+        'The block associated with the block move event ' +
+          'could not be found',
+      );
     }
     const location = {} as BlockLocation;
     const parent = block.getParent();
@@ -215,9 +223,11 @@ export class BlockMove extends BlockBase {
    * @returns False if something changed.
    */
   override isNull(): boolean {
-    return this.oldParentId === this.newParentId &&
-        this.oldInputName === this.newInputName &&
-        Coordinate.equals(this.oldCoordinate, this.newCoordinate);
+    return (
+      this.oldParentId === this.newParentId &&
+      this.oldInputName === this.newInputName &&
+      Coordinate.equals(this.oldCoordinate, this.newCoordinate)
+    );
   }
 
   /**
@@ -229,22 +239,23 @@ export class BlockMove extends BlockBase {
     const workspace = this.getEventWorkspace_();
     if (!this.blockId) {
       throw new Error(
-          'The block ID is undefined. Either pass a block to ' +
-          'the constructor, or call fromJson');
+        'The block ID is undefined. Either pass a block to ' +
+          'the constructor, or call fromJson',
+      );
     }
     const block = workspace.getBlockById(this.blockId);
     if (!block) {
-      console.warn('Can\'t move non-existent block: ' + this.blockId);
+      console.warn("Can't move non-existent block: " + this.blockId);
       return;
     }
     const parentId = forward ? this.newParentId : this.oldParentId;
     const inputName = forward ? this.newInputName : this.oldInputName;
     const coordinate = forward ? this.newCoordinate : this.oldCoordinate;
-    let parentBlock: Block|null;
+    let parentBlock: Block | null;
     if (parentId) {
       parentBlock = workspace.getBlockById(parentId);
       if (!parentBlock) {
-        console.warn('Can\'t connect to non-existent block: ' + parentId);
+        console.warn("Can't connect to non-existent block: " + parentId);
         return;
       }
     }
@@ -253,15 +264,17 @@ export class BlockMove extends BlockBase {
     }
     if (coordinate) {
       const xy = block.getRelativeToSurfaceXY();
-      block.moveBy(coordinate.x - xy.x, coordinate.y - xy.y);
+      block.moveBy(coordinate.x - xy.x, coordinate.y - xy.y, this.reason);
     } else {
       let blockConnection = block.outputConnection;
-      if (!blockConnection ||
-          block.previousConnection && block.previousConnection.isConnected()) {
+      if (
+        !blockConnection ||
+        (block.previousConnection && block.previousConnection.isConnected())
+      ) {
         blockConnection = block.previousConnection;
       }
       let parentConnection;
-      const connectionType = blockConnection.type;
+      const connectionType = blockConnection?.type;
       if (inputName) {
         const input = parentBlock!.getInput(inputName);
         if (input) {
@@ -270,10 +283,10 @@ export class BlockMove extends BlockBase {
       } else if (connectionType === ConnectionType.PREVIOUS_STATEMENT) {
         parentConnection = parentBlock!.nextConnection;
       }
-      if (parentConnection) {
+      if (parentConnection && blockConnection) {
         blockConnection.connect(parentConnection);
       } else {
-        console.warn('Can\'t connect to non-existent input: ' + inputName);
+        console.warn("Can't connect to non-existent input: " + inputName);
       }
     }
   }
@@ -286,7 +299,8 @@ export interface BlockMoveJson extends BlockBaseJson {
   newParentId?: string;
   newInputName?: string;
   newCoordinate?: string;
+  reason?: string[];
   recordUndo?: boolean;
 }
 
-registry.register(registry.Type.EVENT, eventUtils.MOVE, BlockMove);
+registry.register(registry.Type.EVENT, EventType.BLOCK_MOVE, BlockMove);

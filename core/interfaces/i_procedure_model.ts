@@ -4,14 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * The interface for the data model of a procedure.
- *
- * @namespace Blockly.IProcedureModel
- */
-
+import {State} from '../serialization/procedures.js';
 import {IParameterModel} from './i_parameter_model.js';
-
 
 /**
  * A data model for a procedure.
@@ -35,7 +29,7 @@ export interface IProcedureModel {
    *
    * Pass null to represent a procedure that does not return.
    */
-  setReturnTypes(types: string[]|null): this;
+  setReturnTypes(types: string[] | null): this;
 
   /**
    * Sets whether this procedure is enabled/disabled. If a procedure is disabled
@@ -60,11 +54,18 @@ export interface IProcedureModel {
    *
    * Null represents a procedure that does not return a value.
    */
-  getReturnTypes(): string[]|null;
+  getReturnTypes(): string[] | null;
 
   /**
    * Returns whether the procedure is enabled/disabled. If a procedure is
    * disabled, all procedure caller blocks should be disabled as well.
    */
   getEnabled(): boolean;
+
+  /**
+   * Serializes the state of the procedure to JSON.
+   *
+   * @returns JSON serializable state of the procedure.
+   */
+  saveState(): State;
 }

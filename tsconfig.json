@@ -1,8 +1,5 @@
 {
-  "include": [
-    "core/**/*",  // N.B.: also pulls in closure/goog/goog.js if needed.
-    "closure/**/*",  // Just for ouptut directory structure.
-  ],
+  "include": ["core/**/*", "blocks/**/*", "generators/**/*"],
   "compilerOptions": {
     // Tells TypeScript to read JS files, as
     // normally they are ignored as source files
@@ -35,6 +32,6 @@
     // which turns out to have syntax errors (see e.g. discussion on
     // PR #6564: https://github.com/google/blockly/pull/6564), so
     // disable it except for the explicitly-specified types.
-    "types": [],
+    "types": []
   }
 }

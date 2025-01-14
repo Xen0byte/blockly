@@ -4,13 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Utility functions for handling procedures.
- *
- * @namespace Blockly.Procedures
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.Procedures');
+// Former goog.module ID: Blockly.Procedures
 
 // Unused import preserved for side-effects. Remove if unneeded.
 import './events/events_block_change.js';
@@ -21,20 +15,37 @@ import {Blocks} from './blocks.js';
 import * as common from './common.js';
 import type {Abstract} from './events/events_abstract.js';
 import type {BubbleOpen} from './events/events_bubble_open.js';
+import {
+  isBlockChange,
+  isBlockCreate,
+  isBlockDelete,
+  isBlockFieldIntermediateChange,
+  isBubbleOpen,
+} from './events/predicates.js';
+import {EventType} from './events/type.js';
 import * as eventUtils from './events/utils.js';
 import {Field, UnattachedFieldError} from './field.js';
-import {Msg} from './msg.js';
-import {Names} from './names.js';
+import {MutatorIcon} from './icons.js';
+import {
+  isLegacyProcedureCallBlock,
+  isLegacyProcedureDefBlock,
+  ProcedureBlock,
+  ProcedureTuple,
+} from './interfaces/i_legacy_procedure_blocks.js';
 import {IParameterModel} from './interfaces/i_parameter_model.js';
+import {
+  IProcedureBlock,
+  isProcedureBlock,
+} from './interfaces/i_procedure_block.js';
 import {IProcedureMap} from './interfaces/i_procedure_map.js';
 import {IProcedureModel} from './interfaces/i_procedure_model.js';
-import {IProcedureBlock, isProcedureBlock} from './interfaces/i_procedure_block.js';
+import {Msg} from './msg.js';
+import {Names} from './names.js';
 import {ObservableProcedureMap} from './observable_procedure_map.js';
 import * as utilsXml from './utils/xml.js';
 import * as Variables from './variables.js';
 import type {Workspace} from './workspace.js';
 import type {WorkspaceSvg} from './workspace_svg.js';
-
 
 /**
  * String for use in the "custom" attribute of a category in toolbox XML.
@@ -50,37 +61,6 @@ export const CATEGORY_NAME = 'PROCEDURE';
  */
 export const DEFAULT_ARG = 'x';
 
-export type ProcedureTuple = [string, string[], boolean];
-
-/**
- * Procedure block type.
- */
-export interface ProcedureBlock {
-  getProcedureCall: () => string;
-  renameProcedure: (p1: string, p2: string) => void;
-  getProcedureDef: () => ProcedureTuple;
-}
-
-interface LegacyProcedureDefBlock {
-  getProcedureDef: () => ProcedureTuple
-}
-
-function isLegacyProcedureDefBlock(block: Object):
-    block is LegacyProcedureDefBlock {
-  return (block as any).getProcedureDef !== undefined;
-}
-
-interface LegacyProcedureCallBlock {
-  getProcedureCall: () => string;
-  renameProcedure: (p1: string, p2: string) => void;
-}
-
-function isLegacyProcedureCallBlock(block: Object):
-    block is LegacyProcedureCallBlock {
-  return (block as any).getProcedureCall !== undefined &&
-      (block as any).renameProcedure !== undefined;
-}
-
 /**
  * Find all user-created procedure definitions in a workspace.
  *
@@ -89,34 +69,33 @@ function isLegacyProcedureCallBlock(block: Object):
  *     variables, the second with. Each procedure is defined by a three-element
  *     list of name, parameter list, and return value boolean.
  */
-export function allProcedures(root: Workspace):
-    [ProcedureTuple[], ProcedureTuple[]] {
-  const proceduresNoReturn: ProcedureTuple[] =
-      root.getProcedureMap()
-          .getProcedures()
-          .filter((p) => !p.getReturnTypes())
-          .map(
-              (p) =>
-                  [p.getName(),
-                   p.getParameters().map((pa) => pa.getName()),
-                   false,
-  ]);
+export function allProcedures(
+  root: Workspace,
+): [ProcedureTuple[], ProcedureTuple[]] {
+  const proceduresNoReturn: ProcedureTuple[] = root
+    .getProcedureMap()
+    .getProcedures()
+    .filter((p) => !p.getReturnTypes())
+    .map((p) => [
+      p.getName(),
+      p.getParameters().map((pa) => pa.getName()),
+      false,
+    ]);
   root.getBlocksByType('procedures_defnoreturn', false).forEach((b) => {
     if (!isProcedureBlock(b) && isLegacyProcedureDefBlock(b)) {
       proceduresNoReturn.push(b.getProcedureDef());
     }
   });
 
-  const proceduresReturn: ProcedureTuple[] =
-      root.getProcedureMap()
-          .getProcedures()
-          .filter((p) => !!p.getReturnTypes())
-          .map(
-              (p) =>
-                  [p.getName(),
-                   p.getParameters().map((pa) => pa.getName()),
-                   true,
-  ]);
+  const proceduresReturn: ProcedureTuple[] = root
+    .getProcedureMap()
+    .getProcedures()
+    .filter((p) => !!p.getReturnTypes())
+    .map((p) => [
+      p.getName(),
+      p.getParameters().map((pa) => pa.getName()),
+      true,
+    ]);
   root.getBlocksByType('procedures_defreturn', false).forEach((b) => {
     if (!isProcedureBlock(b) && isLegacyProcedureDefBlock(b)) {
       proceduresReturn.push(b.getProcedureDef());
@@ -176,7 +155,10 @@ export function findLegalName(name: string, block: Block): string {
  * @returns True if the name is legal.
  */
 function isLegalName(
-    name: string, workspace: Workspace, opt_exclude?: Block): boolean {
+  name: string,
+  workspace: Workspace,
+  opt_exclude?: Block,
+): boolean {
   return !isNameUsed(name, workspace, opt_exclude);
 }
 
@@ -190,19 +172,25 @@ function isLegalName(
  * @returns True if the name is used, otherwise return false.
  */
 export function isNameUsed(
-    name: string, workspace: Workspace, opt_exclude?: Block): boolean {
+  name: string,
+  workspace: Workspace,
+  opt_exclude?: Block,
+): boolean {
   for (const block of workspace.getAllBlocks(false)) {
     if (block === opt_exclude) continue;
 
-    if (isLegacyProcedureDefBlock(block) &&
-        Names.equals(block.getProcedureDef()[0], name)) {
+    if (
+      isLegacyProcedureDefBlock(block) &&
+      Names.equals(block.getProcedureDef()[0], name)
+    ) {
       return true;
     }
   }
 
-  const excludeModel = opt_exclude && isProcedureBlock(opt_exclude) ?
-      opt_exclude?.getProcedureModel() :
-      undefined;
+  const excludeModel =
+    opt_exclude && isProcedureBlock(opt_exclude)
+      ? opt_exclude?.getProcedureModel()
+      : undefined;
   for (const model of workspace.getProcedureMap().getProcedures()) {
     if (model === excludeModel) continue;
     if (Names.equals(model.getName(), name)) return true;
@@ -262,7 +250,8 @@ export function flyoutCategory(workspace: WorkspaceSvg): Element[] {
     const nameField = utilsXml.createElement('field');
     nameField.setAttribute('name', 'NAME');
     nameField.appendChild(
-        utilsXml.createTextNode(Msg['PROCEDURES_DEFNORETURN_PROCEDURE']));
+      utilsXml.createTextNode(Msg['PROCEDURES_DEFNORETURN_PROCEDURE']),
+    );
     block.appendChild(nameField);
     xmlList.push(block);
   }
@@ -276,7 +265,8 @@ export function flyoutCategory(workspace: WorkspaceSvg): Element[] {
     const nameField = utilsXml.createElement('field');
     nameField.setAttribute('name', 'NAME');
     nameField.appendChild(
-        utilsXml.createTextNode(Msg['PROCEDURES_DEFRETURN_PROCEDURE']));
+      utilsXml.createTextNode(Msg['PROCEDURES_DEFRETURN_PROCEDURE']),
+    );
     block.appendChild(nameField);
     xmlList.push(block);
   }
@@ -300,7 +290,9 @@ export function flyoutCategory(workspace: WorkspaceSvg): Element[] {
    * @param templateName The type of the block to generate.
    */
   function populateProcedures(
-      procedureList: ProcedureTuple[], templateName: string) {
+    procedureList: ProcedureTuple[],
+    templateName: string,
+  ) {
     for (let i = 0; i < procedureList.length; i++) {
       const name = procedureList[i][0];
       const args = procedureList[i][1];
@@ -340,7 +332,7 @@ export function flyoutCategory(workspace: WorkspaceSvg): Element[] {
 function updateMutatorFlyout(workspace: WorkspaceSvg) {
   const usedNames = [];
   const blocks = workspace.getBlocksByType('procedures_mutatorarg', false);
-  for (let i = 0, block; block = blocks[i]; i++) {
+  for (let i = 0, block; (block = blocks[i]); i++) {
     usedNames.push(block.getFieldValue('NAME'));
   }
 
@@ -349,8 +341,10 @@ function updateMutatorFlyout(workspace: WorkspaceSvg) {
   argBlock.setAttribute('type', 'procedures_mutatorarg');
   const nameField = utilsXml.createElement('field');
   nameField.setAttribute('name', 'NAME');
-  const argValue =
-      Variables.generateUniqueNameFromOptions(DEFAULT_ARG, usedNames);
+  const argValue = Variables.generateUniqueNameFromOptions(
+    DEFAULT_ARG,
+    usedNames,
+  );
   const fieldContent = utilsXml.createTextNode(argValue);
 
   nameField.appendChild(fieldContent);
@@ -368,22 +362,26 @@ function updateMutatorFlyout(workspace: WorkspaceSvg) {
  * @internal
  */
 export function mutatorOpenListener(e: Abstract) {
-  if (e.type !== eventUtils.BUBBLE_OPEN) {
-    return;
-  }
+  if (!isBubbleOpen(e)) return;
+
   const bubbleEvent = e as BubbleOpen;
-  if (!(bubbleEvent.bubbleType === 'mutator' && bubbleEvent.isOpen) ||
-      !bubbleEvent.blockId) {
+  if (
+    !(bubbleEvent.bubbleType === 'mutator' && bubbleEvent.isOpen) ||
+    !bubbleEvent.blockId
+  ) {
     return;
   }
-  const workspaceId = (bubbleEvent.workspaceId);
-  const block = common.getWorkspaceById(workspaceId)!.getBlockById(
-                    bubbleEvent.blockId) as BlockSvg;
+  const workspaceId = bubbleEvent.workspaceId;
+  const block = common
+    .getWorkspaceById(workspaceId)!
+    .getBlockById(bubbleEvent.blockId) as BlockSvg;
   const type = block.type;
   if (type !== 'procedures_defnoreturn' && type !== 'procedures_defreturn') {
     return;
   }
-  const workspace = block.mutator!.getWorkspace() as WorkspaceSvg;
+  const workspace = (
+    block.getIcon(MutatorIcon.TYPE) as MutatorIcon
+  ).getWorkspace()!;
   updateMutatorFlyout(workspace);
   workspace.addChangeListener(mutatorChangeListener);
 }
@@ -394,9 +392,12 @@ export function mutatorOpenListener(e: Abstract) {
  * @param e The event that triggered this listener.
  */
 function mutatorChangeListener(e: Abstract) {
-  if (e.type !== eventUtils.BLOCK_CREATE &&
-      e.type !== eventUtils.BLOCK_DELETE &&
-      e.type !== eventUtils.BLOCK_CHANGE) {
+  if (
+    !isBlockCreate(e) &&
+    !isBlockDelete(e) &&
+    !isBlockChange(e) &&
+    !isBlockFieldIntermediateChange(e)
+  ) {
     return;
   }
   const workspaceId = e.workspaceId as string;
@@ -413,9 +414,11 @@ function mutatorChangeListener(e: Abstract) {
  */
 export function getCallers(name: string, workspace: Workspace): Block[] {
   return workspace.getAllBlocks(false).filter((block) => {
-    return blockIsModernCallerFor(block, name) ||
-        (isLegacyProcedureCallBlock(block) &&
-         Names.equals(block.getProcedureCall(), name));
+    return (
+      blockIsModernCallerFor(block, name) ||
+      (isLegacyProcedureCallBlock(block) &&
+        Names.equals(block.getProcedureCall(), name))
+    );
   });
 }
 
@@ -424,9 +427,12 @@ export function getCallers(name: string, workspace: Workspace): Block[] {
  *     procedure name.
  */
 function blockIsModernCallerFor(block: Block, procName: string): boolean {
-  return isProcedureBlock(block) && !block.isProcedureDef() &&
-      block.getProcedureModel() &&
-      Names.equals(block.getProcedureModel().getName(), procName);
+  return (
+    isProcedureBlock(block) &&
+    !block.isProcedureDef() &&
+    block.getProcedureModel() &&
+    Names.equals(block.getProcedureModel().getName(), procName)
+  );
 }
 
 /**
@@ -441,7 +447,7 @@ export function mutateCallers(defBlock: Block) {
   const name = procedureBlock.getProcedureDef()[0];
   const xmlElement = defBlock.mutationToDom!(true);
   const callers = getCallers(name, defBlock.workspace);
-  for (let i = 0, caller; caller = callers[i]; i++) {
+  for (let i = 0, caller; (caller = callers[i]); i++) {
     const oldMutationDom = caller.mutationToDom!();
     const oldMutation = oldMutationDom && utilsXml.domToText(oldMutationDom);
     if (caller.domToMutation) {
@@ -454,8 +460,15 @@ export function mutateCallers(defBlock: Block) {
       // undo action since it is deterministically tied to the procedure's
       // definition mutation.
       eventUtils.setRecordUndo(false);
-      eventUtils.fire(new (eventUtils.get(eventUtils.BLOCK_CHANGE))(
-          caller, 'mutation', null, oldMutation, newMutation));
+      eventUtils.fire(
+        new (eventUtils.get(EventType.BLOCK_CHANGE))(
+          caller,
+          'mutation',
+          null,
+          oldMutation,
+          newMutation,
+        ),
+      );
       eventUtils.setRecordUndo(oldRecordUndo);
     }
   }
@@ -468,17 +481,25 @@ export function mutateCallers(defBlock: Block) {
  * @param workspace The workspace to search.
  * @returns The procedure definition block, or null not found.
  */
-export function getDefinition(name: string, workspace: Workspace): Block|null {
+export function getDefinition(
+  name: string,
+  workspace: Workspace,
+): Block | null {
   // Do not assume procedure is a top block. Some languages allow nested
   // procedures. Also do not assume it is one of the built-in blocks. Only
   // rely on isProcedureDef and getProcedureDef.
   for (const block of workspace.getAllBlocks(false)) {
-    if (isProcedureBlock(block) && block.isProcedureDef() &&
-        Names.equals(block.getProcedureModel().getName(), name)) {
+    if (
+      isProcedureBlock(block) &&
+      block.isProcedureDef() &&
+      Names.equals(block.getProcedureModel().getName(), name)
+    ) {
       return block;
     }
-    if (isLegacyProcedureDefBlock(block) &&
-        Names.equals(block.getProcedureDef()[0], name)) {
+    if (
+      isLegacyProcedureDefBlock(block) &&
+      Names.equals(block.getProcedureDef()[0], name)
+    ) {
       return block;
     }
   }
@@ -486,10 +507,11 @@ export function getDefinition(name: string, workspace: Workspace): Block|null {
 }
 
 export {
-  ObservableProcedureMap,
   IParameterModel,
   IProcedureBlock,
-  isProcedureBlock,
   IProcedureMap,
   IProcedureModel,
+  isProcedureBlock,
+  ObservableProcedureMap,
+  ProcedureTuple,
 };

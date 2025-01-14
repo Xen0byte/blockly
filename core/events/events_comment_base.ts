@@ -9,20 +9,18 @@
  *
  * @class
  */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.Events.CommentBase');
+// Former goog.module ID: Blockly.Events.CommentBase
 
-import * as deprecation from '../utils/deprecation.js';
-import * as utilsXml from '../utils/xml.js';
-import type {WorkspaceComment} from '../workspace_comment.js';
-import * as Xml from '../xml.js';
-
-import {Abstract as AbstractEvent, AbstractEventJson} from './events_abstract.js';
+import type {WorkspaceComment} from '../comments/workspace_comment.js';
+import * as comments from '../serialization/workspace_comments.js';
+import type {Workspace} from '../workspace.js';
+import {
+  Abstract as AbstractEvent,
+  AbstractEventJson,
+} from './events_abstract.js';
 import type {CommentCreate} from './events_comment_create.js';
 import type {CommentDelete} from './events_comment_delete.js';
-import * as eventUtils from './utils.js';
-import type {Workspace} from '../workspace.js';
-
+import {getGroup, getRecordUndo} from './utils.js';
 
 /**
  * Abstract class for a comment event.
@@ -46,8 +44,8 @@ export class CommentBase extends AbstractEvent {
 
     this.commentId = opt_comment.id;
     this.workspaceId = opt_comment.workspace.id;
-    this.group = eventUtils.getGroup();
-    this.recordUndo = eventUtils.getRecordUndo();
+    this.group = getGroup();
+    this.recordUndo = getRecordUndo();
   }
 
   /**
@@ -59,24 +57,12 @@ export class CommentBase extends AbstractEvent {
     const json = super.toJson() as CommentBaseJson;
     if (!this.commentId) {
       throw new Error(
-          'The comment ID is undefined. Either pass a comment to ' +
-          'the constructor, or call fromJson');
+        'The comment ID is undefined. Either pass a comment to ' +
+          'the constructor, or call fromJson',
+      );
     }
     json['commentId'] = this.commentId;
     return json;
-  }
-
-  /**
-   * Decode the JSON event.
-   *
-   * @param json JSON representation.
-   */
-  override fromJson(json: CommentBaseJson) {
-    deprecation.warn(
-        'Blockly.Events.CommentBase.prototype.fromJson', 'version 9',
-        'version 10', 'Blockly.Events.fromJson');
-    super.fromJson(json);
-    this.commentId = json['commentId'];
   }
 
   /**
@@ -88,11 +74,16 @@ export class CommentBase extends AbstractEvent {
    *     parameters to static methods in superclasses.
    * @internal
    */
-  static fromJson(json: CommentBaseJson, workspace: Workspace, event?: any):
-      CommentBase {
-    const newEvent =
-        super.fromJson(json, workspace, event ?? new CommentBase()) as
-        CommentBase;
+  static fromJson(
+    json: CommentBaseJson,
+    workspace: Workspace,
+    event?: any,
+  ): CommentBase {
+    const newEvent = super.fromJson(
+      json,
+      workspace,
+      event ?? new CommentBase(),
+    ) as CommentBase;
     newEvent.commentId = json['commentId'];
     return newEvent;
   }
@@ -104,28 +95,27 @@ export class CommentBase extends AbstractEvent {
    * @param create if True then Create, if False then Delete
    */
   static CommentCreateDeleteHelper(
-      event: CommentCreate|CommentDelete, create: boolean) {
+    event: CommentCreate | CommentDelete,
+    create: boolean,
+  ) {
     const workspace = event.getEventWorkspace_();
     if (create) {
-      const xmlElement = utilsXml.createElement('xml');
-      if (!event.xml) {
-        throw new Error('Ecountered a comment event without proper xml');
+      if (!event.json) {
+        throw new Error('Encountered a comment event without proper json');
       }
-      xmlElement.appendChild(event.xml);
-      Xml.domToWorkspace(xmlElement, workspace);
+      comments.append(event.json, workspace);
     } else {
       if (!event.commentId) {
         throw new Error(
-            'The comment ID is undefined. Either pass a comment to ' +
-            'the constructor, or call fromJson');
+          'The comment ID is undefined. Either pass a comment to ' +
+            'the constructor, or call fromJson',
+        );
       }
       const comment = workspace.getCommentById(event.commentId);
       if (comment) {
         comment.dispose();
       } else {
-        // Only complain about root-level block.
-        console.warn(
-            'Can\'t uncreate non-existent comment: ' + event.commentId);
+        console.warn("Can't delete non-existent comment: " + event.commentId);
       }
     }
   }

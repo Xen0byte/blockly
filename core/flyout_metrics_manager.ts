@@ -9,13 +9,11 @@
  *
  * @class
  */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.FlyoutMetricsManager');
+// Former goog.module ID: Blockly.FlyoutMetricsManager
 
 import type {IFlyout} from './interfaces/i_flyout.js';
 import {ContainerRegion, MetricsManager} from './metrics_manager.js';
 import type {WorkspaceSvg} from './workspace_svg.js';
-
 
 /**
  * Calculates metrics for a flyout's workspace.
@@ -40,12 +38,13 @@ export class FlyoutMetricsManager extends MetricsManager {
    *
    * @returns The bounding box of the blocks on the workspace.
    */
-  private getBoundingBox_(): SVGRect|
-      {height: number, y: number, width: number, x: number} {
+  private getBoundingBox():
+    | SVGRect
+    | {height: number; y: number; width: number; x: number} {
     let blockBoundingBox;
     try {
       blockBoundingBox = this.workspace_.getCanvas().getBBox();
-    } catch (e) {
+    } catch {
       // Firefox has trouble with hidden elements (Bug 528969).
       // 2021 Update: It looks like this was fixed around Firefox 77 released in
       // 2020.
@@ -56,7 +55,7 @@ export class FlyoutMetricsManager extends MetricsManager {
 
   override getContentMetrics(opt_getWorkspaceCoordinates?: boolean) {
     // The bounding box is in workspace coordinates.
-    const blockBoundingBox = this.getBoundingBox_();
+    const blockBoundingBox = this.getBoundingBox();
     const scale = opt_getWorkspaceCoordinates ? 1 : this.workspace_.scale;
 
     return {
@@ -68,8 +67,10 @@ export class FlyoutMetricsManager extends MetricsManager {
   }
 
   override getScrollMetrics(
-      opt_getWorkspaceCoordinates?: boolean, opt_viewMetrics?: ContainerRegion,
-      opt_contentMetrics?: ContainerRegion) {
+    opt_getWorkspaceCoordinates?: boolean,
+    opt_viewMetrics?: ContainerRegion,
+    opt_contentMetrics?: ContainerRegion,
+  ) {
     const contentMetrics = opt_contentMetrics || this.getContentMetrics();
     const margin = this.flyout_.MARGIN * this.workspace_.scale;
     const scale = opt_getWorkspaceCoordinates ? this.workspace_.scale : 1;

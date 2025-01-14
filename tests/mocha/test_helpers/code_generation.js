@@ -1,14 +1,11 @@
-/* eslint-disable valid-jsdoc */
 /**
  * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-goog.declareModuleId('Blockly.test.helpers.codeGeneration');
-
+import {assert} from '../../../node_modules/chai/chai.js';
 import {runTestSuites} from './common.js';
-
 
 /**
  * Code generation test case configuration.
@@ -71,7 +68,7 @@ export class CodeGenerationTestSuite {
  */
 const createCodeGenerationTestFn_ = (generator) => {
   return (testCase) => {
-    return function() {
+    return function () {
       const block = testCase.createBlock(this.workspace);
       let code;
       let innerOrder;
@@ -85,12 +82,14 @@ const createCodeGenerationTestFn_ = (generator) => {
           code = code[0];
         }
       }
-      const assertFunc = (typeof testCase.expectedCode === 'string') ?
-          chai.assert.equal : chai.assert.match;
+      const assertFunc =
+        typeof testCase.expectedCode === 'string' ? assert.equal : assert.match;
       assertFunc(code, testCase.expectedCode);
-      if (!testCase.useWorkspaceToCode &&
-          testCase.expectedInnerOrder !== undefined) {
-        chai.assert.equal(innerOrder, testCase.expectedInnerOrder);
+      if (
+        !testCase.useWorkspaceToCode &&
+        testCase.expectedInnerOrder !== undefined
+      ) {
+        assert.equal(innerOrder, testCase.expectedInnerOrder);
       }
     };
   };

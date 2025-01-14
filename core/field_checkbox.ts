@@ -9,20 +9,17 @@
  *
  * @class
  */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.FieldCheckbox');
+// Former goog.module ID: Blockly.FieldCheckbox
 
 // Unused import preserved for side-effects. Remove if unneeded.
 import './events/events_block_change.js';
 
-import * as dom from './utils/dom.js';
 import {Field, FieldConfig, FieldValidator} from './field.js';
 import * as fieldRegistry from './field_registry.js';
-import type {Sentinel} from './utils/sentinel.js';
+import * as dom from './utils/dom.js';
 
-type BoolString = 'TRUE'|'FALSE';
-type CheckboxBool = BoolString|boolean;
-export type FieldCheckboxValidator = FieldValidator<CheckboxBool>;
+type BoolString = 'TRUE' | 'FALSE';
+type CheckboxBool = BoolString | boolean;
 
 /**
  * Class for a checkbox field.
@@ -30,7 +27,7 @@ export type FieldCheckboxValidator = FieldValidator<CheckboxBool>;
 export class FieldCheckbox extends Field<CheckboxBool> {
   /** Default character for the checkmark. */
   static readonly CHECK_CHAR = '✓';
-  private checkChar_: string;
+  private checkChar: string;
 
   /**
    * Serializable fields are saved by the serializer, non-serializable fields
@@ -47,40 +44,42 @@ export class FieldCheckbox extends Field<CheckboxBool> {
    * NOTE: The default value is set in `Field`, so maintain that value instead
    * of overwriting it here or in the constructor.
    */
-  override value_: boolean|null = this.value_;
+  override value_: boolean | null = this.value_;
 
   /**
-   * @param opt_value The initial value of the field. Should either be 'TRUE',
+   * @param value The initial value of the field. Should either be 'TRUE',
    *     'FALSE' or a boolean. Defaults to 'FALSE'. Also accepts
    *     Field.SKIP_SETUP if you wish to skip setup (only used by subclasses
    *     that want to handle configuration and setting the field value after
    *     their own constructors have run).
-   * @param opt_validator  A function that is called to validate changes to the
+   * @param validator  A function that is called to validate changes to the
    *     field's value. Takes in a value ('TRUE' or 'FALSE') & returns a
    *     validated value ('TRUE' or 'FALSE'), or null to abort the change.
-   * @param opt_config A map of options used to configure the field.
+   * @param config A map of options used to configure the field.
    *     See the [field creation documentation]{@link
    * https://developers.google.com/blockly/guides/create-custom-blocks/fields/built-in-fields/checkbox#creation}
    * for a list of properties this parameter supports.
    */
   constructor(
-      opt_value?: CheckboxBool|Sentinel, opt_validator?: FieldCheckboxValidator,
-      opt_config?: FieldCheckboxConfig) {
+    value?: CheckboxBool | typeof Field.SKIP_SETUP,
+    validator?: FieldCheckboxValidator,
+    config?: FieldCheckboxConfig,
+  ) {
     super(Field.SKIP_SETUP);
 
     /**
      * Character for the check mark. Used to apply a different check mark
      * character to individual fields.
      */
-    this.checkChar_ = FieldCheckbox.CHECK_CHAR;
+    this.checkChar = FieldCheckbox.CHECK_CHAR;
 
-    if (Field.isSentinel(opt_value)) return;
-    if (opt_config) {
-      this.configure_(opt_config);
+    if (value === Field.SKIP_SETUP) return;
+    if (config) {
+      this.configure_(config);
     }
-    this.setValue(opt_value);
-    if (opt_validator) {
-      this.setValidator(opt_validator);
+    this.setValue(value);
+    if (validator) {
+      this.setValidator(validator);
     }
   }
 
@@ -91,7 +90,7 @@ export class FieldCheckbox extends Field<CheckboxBool> {
    */
   protected override configure_(config: FieldCheckboxConfig) {
     super.configure_(config);
-    if (config.checkCharacter) this.checkChar_ = config.checkCharacter;
+    if (config.checkCharacter) this.checkChar = config.checkCharacter;
   }
 
   /**
@@ -110,8 +109,6 @@ export class FieldCheckbox extends Field<CheckboxBool> {
 
   /**
    * Create the block UI for this checkbox.
-   *
-   * @internal
    */
   override initView() {
     super.initView();
@@ -129,7 +126,7 @@ export class FieldCheckbox extends Field<CheckboxBool> {
   }
 
   override getDisplayText_() {
-    return this.checkChar_;
+    return this.checkChar;
   }
 
   /**
@@ -138,8 +135,8 @@ export class FieldCheckbox extends Field<CheckboxBool> {
    * @param character The character to use for the check mark, or null to use
    *     the default.
    */
-  setCheckCharacter(character: string|null) {
-    this.checkChar_ = character || FieldCheckbox.CHECK_CHAR;
+  setCheckCharacter(character: string | null) {
+    this.checkChar = character || FieldCheckbox.CHECK_CHAR;
     this.forceRerender();
   }
 
@@ -151,15 +148,16 @@ export class FieldCheckbox extends Field<CheckboxBool> {
   /**
    * Ensure that the input value is valid ('TRUE' or 'FALSE').
    *
-   * @param opt_newValue The input value.
+   * @param newValue The input value.
    * @returns A valid value ('TRUE' or 'FALSE), or null if invalid.
    */
-  protected override doClassValidation_(opt_newValue?: AnyDuringMigration):
-      BoolString|null {
-    if (opt_newValue === true || opt_newValue === 'TRUE') {
+  protected override doClassValidation_(
+    newValue?: AnyDuringMigration,
+  ): BoolString | null {
+    if (newValue === true || newValue === 'TRUE') {
       return 'TRUE';
     }
-    if (opt_newValue === false || opt_newValue === 'FALSE') {
+    if (newValue === false || newValue === 'FALSE') {
       return 'FALSE';
     }
     return null;
@@ -172,7 +170,7 @@ export class FieldCheckbox extends Field<CheckboxBool> {
    *     that this is a either 'TRUE' or 'FALSE'.
    */
   protected override doValueUpdate_(newValue: BoolString) {
-    this.value_ = this.convertValueToBool_(newValue);
+    this.value_ = this.convertValueToBool(newValue);
     // Update visual.
     if (this.textElement_) {
       this.textElement_.style.display = this.value_ ? 'block' : 'none';
@@ -193,7 +191,7 @@ export class FieldCheckbox extends Field<CheckboxBool> {
    *
    * @returns The boolean value of this field.
    */
-  getValueBoolean(): boolean|null {
+  getValueBoolean(): boolean | null {
     return this.value_;
   }
 
@@ -203,7 +201,7 @@ export class FieldCheckbox extends Field<CheckboxBool> {
    * @returns Text representing the value of this field ('true' or 'false').
    */
   override getText(): string {
-    return String(this.convertValueToBool_(this.value_));
+    return String(this.convertValueToBool(this.value_));
   }
 
   /**
@@ -215,7 +213,7 @@ export class FieldCheckbox extends Field<CheckboxBool> {
    * @param value The value to convert.
    * @returns The converted value.
    */
-  private convertValueToBool_(value: CheckboxBool|null): boolean {
+  private convertValueToBool(value: CheckboxBool | null): boolean {
     if (typeof value === 'string') return value === 'TRUE';
     return !!value;
   }
@@ -228,7 +226,9 @@ export class FieldCheckbox extends Field<CheckboxBool> {
    * @nocollapse
    * @internal
    */
-  static fromJson(options: FieldCheckboxFromJsonConfig): FieldCheckbox {
+  static override fromJson(
+    options: FieldCheckboxFromJsonConfig,
+  ): FieldCheckbox {
     // `this` might be a subclass of FieldCheckbox if that class doesn't
     // 'override' the static fromJson method.
     return new this(options.checked, undefined, options);
@@ -252,3 +252,20 @@ export interface FieldCheckboxConfig extends FieldConfig {
 export interface FieldCheckboxFromJsonConfig extends FieldCheckboxConfig {
   checked?: boolean;
 }
+
+/**
+ * A function that is called to validate changes to the field's value before
+ * they are set.
+ *
+ * @see {@link https://developers.google.com/blockly/guides/create-custom-blocks/fields/validators#return_values}
+ * @param newValue The value to be validated.
+ * @returns One of three instructions for setting the new value: `T`, `null`,
+ * or `undefined`.
+ *
+ * - `T` to set this function's returned value instead of `newValue`.
+ *
+ * - `null` to invoke `doValueInvalid_` and not set a value.
+ *
+ * - `undefined` to set `newValue` as is.
+ */
+export type FieldCheckboxValidator = FieldValidator<CheckboxBool>;

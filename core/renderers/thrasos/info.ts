@@ -4,14 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * New (evolving) renderer.
- * Thrasos: spirit of boldness.
- *
- * @class
- */
-import * as goog from '../../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.thrasos.RenderInfo');
+// Former goog.module ID: Blockly.thrasos.RenderInfo
 
 import type {BlockSvg} from '../../block_svg.js';
 import {RenderInfo as BaseRenderInfo} from '../common/info.js';
@@ -22,9 +15,7 @@ import {InRowSpacer} from '../measurables/in_row_spacer.js';
 import type {Row} from '../measurables/row.js';
 import type {TopRow} from '../measurables/top_row.js';
 import {Types} from '../measurables/types.js';
-
 import type {Renderer} from './renderer.js';
-
 
 /**
  * An object containing all sizing information needed to draw this block.
@@ -40,7 +31,6 @@ export class RenderInfo extends BaseRenderInfo {
   /**
    * @param renderer The renderer in use.
    * @param block The block to measure.
-   * @internal
    */
   constructor(renderer: Renderer, block: BlockSvg) {
     super(renderer, block);
@@ -50,7 +40,6 @@ export class RenderInfo extends BaseRenderInfo {
    * Get the block renderer in use.
    *
    * @returns The block renderer in use.
-   * @internal
    */
   override getRenderer(): Renderer {
     return this.renderer_;
@@ -72,8 +61,12 @@ export class RenderInfo extends BaseRenderInfo {
       // No spacing needed before the corner on the top row or the bottom row.
       if (row.startsWithElemSpacer()) {
         // There's a spacer before the first element in the row.
-        row.elements.push(new InRowSpacer(
-            this.constants_, this.getInRowSpacing_(null, oldElems[0])));
+        row.elements.push(
+          new InRowSpacer(
+            this.constants_,
+            this.getInRowSpacing_(null, oldElems[0]),
+          ),
+        );
       }
       if (!oldElems.length) {
         continue;
@@ -85,8 +78,10 @@ export class RenderInfo extends BaseRenderInfo {
       }
       row.elements.push(oldElems[oldElems.length - 1]);
       if (row.endsWithElemSpacer()) {
-        let spacing =
-            this.getInRowSpacing_(oldElems[oldElems.length - 1], null);
+        let spacing = this.getInRowSpacing_(
+          oldElems[oldElems.length - 1],
+          null,
+        );
         if (hasExternalInputs && row.hasDummyInput) {
           spacing += this.constants_.TAB_WIDTH;
         }
@@ -96,7 +91,7 @@ export class RenderInfo extends BaseRenderInfo {
     }
   }
 
-  override getInRowSpacing_(prev: Measurable|null, next: Measurable|null) {
+  override getInRowSpacing_(prev: Measurable | null, next: Measurable | null) {
     if (!prev) {
       // Between an editable field and the beginning of the row.
       if (next && Types.isField(next) && (next as Field).isEditable) {
@@ -206,8 +201,12 @@ export class RenderInfo extends BaseRenderInfo {
     }
 
     // Spacing between two fields of the same editability.
-    if (Types.isField(prev) && next && Types.isField(next) &&
-        (prev as Field).isEditable === (next as Field).isEditable) {
+    if (
+      Types.isField(prev) &&
+      next &&
+      Types.isField(next) &&
+      (prev as Field).isEditable === (next as Field).isEditable
+    ) {
       return this.constants_.LARGE_PADDING;
     }
 
@@ -250,7 +249,7 @@ export class RenderInfo extends BaseRenderInfo {
     if (Types.isBottomRow(row)) {
       const bottomRow = row as BottomRow;
       const baseline =
-          bottomRow.yPos + bottomRow.height - bottomRow.descenderHeight;
+        bottomRow.yPos + bottomRow.height - bottomRow.descenderHeight;
       if (Types.isNextConnection(elem)) {
         return baseline + elem.height / 2;
       }
@@ -267,7 +266,7 @@ export class RenderInfo extends BaseRenderInfo {
     let result = row.yPos;
     if (Types.isField(elem) && row.hasStatement) {
       const offset =
-          this.constants_.TALL_INPUT_FIELD_OFFSET_Y + elem.height / 2;
+        this.constants_.TALL_INPUT_FIELD_OFFSET_Y + elem.height / 2;
       result += offset;
     } else {
       result += row.height / 2;
@@ -287,12 +286,16 @@ export class RenderInfo extends BaseRenderInfo {
       row.xPos = this.startX;
       yCursor += row.height;
 
-      widestRowWithConnectedBlocks =
-          Math.max(widestRowWithConnectedBlocks, row.widthWithConnectedBlocks);
+      widestRowWithConnectedBlocks = Math.max(
+        widestRowWithConnectedBlocks,
+        row.widthWithConnectedBlocks,
+      );
       // Add padding to the bottom row if block height is less than minimum
       const heightWithoutHat = yCursor - this.topRow.ascenderHeight;
-      if (row === this.bottomRow &&
-          heightWithoutHat < this.constants_.MIN_BLOCK_HEIGHT) {
+      if (
+        row === this.bottomRow &&
+        heightWithoutHat < this.constants_.MIN_BLOCK_HEIGHT
+      ) {
         // But the hat height shouldn't be part of this.
         const diff = this.constants_.MIN_BLOCK_HEIGHT - heightWithoutHat;
         this.bottomRow.height += diff;
@@ -300,13 +303,18 @@ export class RenderInfo extends BaseRenderInfo {
       }
       this.recordElemPositions_(row);
     }
-    if (this.outputConnection && this.block_.nextConnection &&
-        this.block_.nextConnection.isConnected()) {
+    if (
+      this.outputConnection &&
+      this.block_.nextConnection &&
+      this.block_.nextConnection.isConnected()
+    ) {
       const target = this.block_.nextConnection.targetBlock();
       if (target) {
         // Include width of connected block in value to stack width measurement.
         widestRowWithConnectedBlocks = Math.max(
-            widestRowWithConnectedBlocks, target.getHeightWidth().width);
+          widestRowWithConnectedBlocks,
+          target.getHeightWidth().width,
+        );
       }
     }
 

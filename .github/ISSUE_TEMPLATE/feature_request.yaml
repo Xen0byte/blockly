@@ -1,12 +1,11 @@
-
-name: Feature request
-description: Suggest an idea for this project
+name: Make a feature request ✨
+description: Suggest an idea to make Blockly better.
 labels: 'issue: feature request, issue: triage'
 body:
   - type: markdown
     attributes:
       value: >
-        Thank you for taking the time to fill out a feature request! 
+        Thank you for taking the time to fill out a feature request!
         If you have a question about how to use Blockly in your application,
         please ask on the [forum](https://groups.google.com/forum/#!forum/blockly) instead of filing an issue.
   - type: checkboxes
