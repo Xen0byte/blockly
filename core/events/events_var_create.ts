@@ -9,24 +9,24 @@
  *
  * @class
  */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.Events.VarCreate');
+// Former goog.module ID: Blockly.Events.VarCreate
 
 import * as registry from '../registry.js';
 import type {VariableModel} from '../variable_model.js';
-
+import type {Workspace} from '../workspace.js';
 import {VarBase, VarBaseJson} from './events_var_base.js';
-import * as eventUtils from './utils.js';
-
+import {EventType} from './type.js';
 
 /**
- * Class for a variable creation event.
- *
- * @alias Blockly.Events.VarCreate
+ * Notifies listeners that a variable model has been created.
  */
 export class VarCreate extends VarBase {
-  override type = eventUtils.VAR_CREATE;
+  override type = EventType.VAR_CREATE;
+
+  /** The type of the variable that was created. */
   varType?: string;
+
+  /** The name of the variable that was created. */
   varName?: string;
 
   /**
@@ -36,7 +36,7 @@ export class VarCreate extends VarBase {
     super(opt_variable);
 
     if (!opt_variable) {
-      return;  // Blank event to be populated by fromJson.
+      return; // Blank event to be populated by fromJson.
     }
     this.varType = opt_variable.type;
     this.varName = opt_variable.name;
@@ -49,15 +49,17 @@ export class VarCreate extends VarBase {
    */
   override toJson(): VarCreateJson {
     const json = super.toJson() as VarCreateJson;
-    if (!this.varType) {
+    if (this.varType === undefined) {
       throw new Error(
-          'The var type is undefined. Either pass a variable to ' +
-          'the constructor, or call fromJson');
+        'The var type is undefined. Either pass a variable to ' +
+          'the constructor, or call fromJson',
+      );
     }
     if (!this.varName) {
       throw new Error(
-          'The var name is undefined. Either pass a variable to ' +
-          'the constructor, or call fromJson');
+        'The var name is undefined. Either pass a variable to ' +
+          'the constructor, or call fromJson',
+      );
     }
     json['varType'] = this.varType;
     json['varName'] = this.varName;
@@ -65,14 +67,27 @@ export class VarCreate extends VarBase {
   }
 
   /**
-   * Decode the JSON event.
+   * Deserializes the JSON event.
    *
-   * @param json JSON representation.
+   * @param event The event to append new properties to. Should be a subclass
+   *     of VarCreate, but we can't specify that due to the fact that parameters
+   *     to static methods in subclasses must be supertypes of parameters to
+   *     static methods in superclasses.
+   * @internal
    */
-  override fromJson(json: VarCreateJson) {
-    super.fromJson(json);
-    this.varType = json['varType'];
-    this.varName = json['varName'];
+  static fromJson(
+    json: VarCreateJson,
+    workspace: Workspace,
+    event?: any,
+  ): VarCreate {
+    const newEvent = super.fromJson(
+      json,
+      workspace,
+      event ?? new VarCreate(),
+    ) as VarCreate;
+    newEvent.varType = json['varType'];
+    newEvent.varName = json['varName'];
+    return newEvent;
   }
 
   /**
@@ -84,13 +99,15 @@ export class VarCreate extends VarBase {
     const workspace = this.getEventWorkspace_();
     if (!this.varId) {
       throw new Error(
-          'The var ID is undefined. Either pass a variable to ' +
-          'the constructor, or call fromJson');
+        'The var ID is undefined. Either pass a variable to ' +
+          'the constructor, or call fromJson',
+      );
     }
     if (!this.varName) {
       throw new Error(
-          'The var name is undefined. Either pass a variable to ' +
-          'the constructor, or call fromJson');
+        'The var name is undefined. Either pass a variable to ' +
+          'the constructor, or call fromJson',
+      );
     }
     if (forward) {
       workspace.createVariable(this.varName, this.varType, this.varId);
@@ -105,4 +122,4 @@ export interface VarCreateJson extends VarBaseJson {
   varName: string;
 }
 
-registry.register(registry.Type.EVENT, eventUtils.VAR_CREATE, VarCreate);
+registry.register(registry.Type.EVENT, EventType.VAR_CREATE, VarCreate);

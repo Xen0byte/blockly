@@ -4,27 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Common functions used both internally and externally, but which
- * must not be at the top level to avoid circular dependencies.
- *
- * @namespace Blockly.common
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.common');
+// Former goog.module ID: Blockly.common
 
-/* eslint-disable-next-line no-unused-vars */
 import type {Block} from './block.js';
+import {ISelectable} from './blockly.js';
 import {BlockDefinition, Blocks} from './blocks.js';
 import type {Connection} from './connection.js';
-import type {ICopyable} from './interfaces/i_copyable.js';
+import {EventType} from './events/type.js';
+import * as eventUtils from './events/utils.js';
 import type {Workspace} from './workspace.js';
 import type {WorkspaceSvg} from './workspace_svg.js';
 
-
 /** Database of all workspaces. */
 const WorkspaceDB_ = Object.create(null);
-
 
 /**
  * Find the workspace with the specified ID.
@@ -32,7 +24,7 @@ const WorkspaceDB_ = Object.create(null);
  * @param id ID of workspace to find.
  * @returns The sought after workspace or null if not found.
  */
-export function getWorkspaceById(id: string): Workspace|null {
+export function getWorkspaceById(id: string): Workspace | null {
   return WorkspaceDB_[id] || null;
 }
 
@@ -79,7 +71,6 @@ let mainWorkspace: Workspace;
  * page.
  *
  * @returns The main workspace.
- * @alias Blockly.common.getMainWorkspace
  */
 export function getMainWorkspace(): Workspace {
   return mainWorkspace;
@@ -89,7 +80,6 @@ export function getMainWorkspace(): Workspace {
  * Sets last used main workspace.
  *
  * @param workspace The most recently used top level workspace.
- * @alias Blockly.common.setMainWorkspace
  */
 export function setMainWorkspace(workspace: Workspace) {
   mainWorkspace = workspace;
@@ -98,14 +88,12 @@ export function setMainWorkspace(workspace: Workspace) {
 /**
  * Currently selected copyable object.
  */
-let selected: ICopyable|null = null;
+let selected: ISelectable | null = null;
 
 /**
  * Returns the currently selected copyable object.
- *
- * @alias Blockly.common.getSelected
  */
-export function getSelected(): ICopyable|null {
+export function getSelected(): ISelectable | null {
   return selected;
 }
 
@@ -115,26 +103,35 @@ export function getSelected(): ICopyable|null {
  * programmatically select a block, use `BlockSvg#select`.
  *
  * @param newSelection The newly selected block.
- * @alias Blockly.common.setSelected
  * @internal
  */
-export function setSelected(newSelection: ICopyable|null) {
+export function setSelected(newSelection: ISelectable | null) {
+  if (selected === newSelection) return;
+
+  const event = new (eventUtils.get(EventType.SELECTED))(
+    selected?.id ?? null,
+    newSelection?.id ?? null,
+    newSelection?.workspace.id ?? selected?.workspace.id ?? '',
+  );
+  eventUtils.fire(event);
+
+  selected?.unselect();
   selected = newSelection;
+  selected?.select();
 }
 
 /**
  * Container element in which to render the WidgetDiv, DropDownDiv and Tooltip.
  */
-let parentContainer: Element|null;
+let parentContainer: Element | null;
 
 /**
  * Get the container element in which to render the WidgetDiv, DropDownDiv and
  * Tooltip.
  *
  * @returns The parent container.
- * @alias Blockly.common.getParentContainer
  */
-export function getParentContainer(): Element|null {
+export function getParentContainer(): Element | null {
   return parentContainer;
 }
 
@@ -145,7 +142,6 @@ export function getParentContainer(): Element|null {
  * This method is a NOP if called after the first `Blockly.inject`.
  *
  * @param newParent The container element.
- * @alias Blockly.common.setParentContainer
  */
 export function setParentContainer(newParent: Element) {
   parentContainer = newParent;
@@ -159,7 +155,6 @@ export function setParentContainer(newParent: Element) {
  * Record the height/width of the SVG image.
  *
  * @param workspace Any workspace in the SVG.
- * @alias Blockly.common.svgResize
  */
 export function svgResize(workspace: WorkspaceSvg) {
   let mainWorkspace = workspace;
@@ -201,10 +196,11 @@ export const draggingConnections: Connection[] = [];
  *    statements (blocks that are not inside a value or statement input
  *    of the block).
  * @returns Map of types to type counts for descendants of the bock.
- * @alias Blockly.common.getBlockTypeCounts
  */
 export function getBlockTypeCounts(
-    block: Block, opt_stripFollowing?: boolean): {[key: string]: number} {
+  block: Block,
+  opt_stripFollowing?: boolean,
+): {[key: string]: number} {
   const typeCountsMap = Object.create(null);
   const descendants = block.getDescendants(true);
   if (opt_stripFollowing) {
@@ -214,7 +210,7 @@ export function getBlockTypeCounts(
       descendants.splice(index, descendants.length - index);
     }
   }
-  for (let i = 0, checkBlock; checkBlock = descendants[i]; i++) {
+  for (let i = 0, checkBlock; (checkBlock = descendants[i]); i++) {
     if (typeCountsMap[checkBlock.type]) {
       typeCountsMap[checkBlock.type]++;
     } else {
@@ -233,7 +229,7 @@ export function getBlockTypeCounts(
  *     of jsonDef.
  */
 function jsonInitFactory(jsonDef: AnyDuringMigration): () => void {
-  return function(this: Block) {
+  return function (this: Block) {
     this.jsonInit(jsonDef);
   };
 }
@@ -243,7 +239,6 @@ function jsonInitFactory(jsonDef: AnyDuringMigration): () => void {
  * by the Blockly Developer Tools.
  *
  * @param jsonArray An array of JSON block definitions.
- * @alias Blockly.common.defineBlocksWithJsonArray
  */
 export function defineBlocksWithJsonArray(jsonArray: AnyDuringMigration[]) {
   TEST_ONLY.defineBlocksWithJsonArrayInternal(jsonArray);
@@ -263,10 +258,10 @@ function defineBlocksWithJsonArrayInternal(jsonArray: AnyDuringMigration[]) {
  * @param jsonArray An array of JSON block definitions.
  * @returns A map of the block
  *     definitions created.
- * @alias Blockly.common.defineBlocksWithJsonArray
  */
 export function createBlockDefinitionsFromJsonArray(
-    jsonArray: AnyDuringMigration[]): {[key: string]: BlockDefinition} {
+  jsonArray: AnyDuringMigration[],
+): {[key: string]: BlockDefinition} {
   const blocks: {[key: string]: BlockDefinition} = {};
   for (let i = 0; i < jsonArray.length; i++) {
     const elem = jsonArray[i];
@@ -277,8 +272,9 @@ export function createBlockDefinitionsFromJsonArray(
     const type = elem['type'];
     if (!type) {
       console.warn(
-          `Block definition #${i} in JSON array is missing a type attribute. ` +
-          'Skipping.');
+        `Block definition #${i} in JSON array is missing a type attribute. ` +
+          'Skipping.',
+      );
       continue;
     }
     blocks[type] = {init: jsonInitFactory(elem)};
@@ -292,14 +288,15 @@ export function createBlockDefinitionsFromJsonArray(
  *
  * @param blocks A map of block
  *     type names to block definitions.
- * @alias Blockly.common.defineBlocks
  */
 export function defineBlocks(blocks: {[key: string]: BlockDefinition}) {
   // Iterate over own enumerable properties.
   for (const type of Object.keys(blocks)) {
     const definition = blocks[type];
     if (type in Blocks) {
-      console.warn(`Block definiton "${type}" overwrites previous definition.`);
+      console.warn(
+        `Block definition "${type}" overwrites previous definition.`,
+      );
     }
     Blocks[type] = definition;
   }
