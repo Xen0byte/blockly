@@ -4,18 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Browser event handling.
- *
- * @namespace Blockly.browserEvents
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.browserEvents');
+// Former goog.module ID: Blockly.browserEvents
+
+// Theoretically we could figure out a way to type the event params correctly,
+// but it's not high priority.
+/* eslint-disable @typescript-eslint/no-unsafe-function-type */
 
 import * as Touch from './touch.js';
-import * as deprecation from './utils/deprecation.js';
 import * as userAgent from './utils/useragent.js';
-
 
 /**
  * Blockly opaque event data used to unbind events when using
@@ -50,17 +46,15 @@ const PAGE_MODE_MULTIPLIER = 125;
  * @param opt_noCaptureIdentifier True if triggering on this event should not
  *     block execution of other event handlers on this touch or other
  *     simultaneous touches.  False by default.
- * @param opt_noPreventDefault No-op, deprecated and will be removed in v10.
  * @returns Opaque data that can be passed to unbindEvent_.
  */
 export function conditionalBind(
-    node: EventTarget, name: string, thisObject: Object|null, func: Function,
-    opt_noCaptureIdentifier?: boolean, opt_noPreventDefault?: boolean): Data {
-  if (opt_noPreventDefault !== undefined) {
-    deprecation.warn(
-        'The opt_noPreventDefault argument of conditionalBind', 'version 9',
-        'version 10');
-  }
+  node: EventTarget,
+  name: string,
+  thisObject: object | null,
+  func: Function,
+  opt_noCaptureIdentifier?: boolean,
+): Data {
   /**
    *
    * @param e
@@ -104,8 +98,11 @@ export function conditionalBind(
  * @returns Opaque data that can be passed to unbindEvent_.
  */
 export function bind(
-    node: EventTarget, name: string, thisObject: Object|null,
-    func: Function): Data {
+  node: EventTarget,
+  name: string,
+  thisObject: object | null,
+  func: Function,
+): Data {
   /**
    *
    * @param e
@@ -145,10 +142,7 @@ export function unbind(bindData: Data): (e: Event) => void {
   // should only pass Data from bind or conditionalBind.
   const callback = bindData[bindData.length - 1][2];
   while (bindData.length) {
-    const bindDatum = bindData.pop();
-    const node = bindDatum![0];
-    const name = bindDatum![1];
-    const func = bindDatum![2];
+    const [node, name, func] = bindData.pop()!;
     node.removeEventListener(name, func, false);
   }
   return callback;
@@ -162,17 +156,24 @@ export function unbind(bindData: Data): (e: Event) => void {
  */
 export function isTargetInput(e: Event): boolean {
   if (e.target instanceof HTMLElement) {
-    if (e.target.isContentEditable ||
-        e.target.getAttribute('data-is-text-input') === 'true') {
+    if (
+      e.target.isContentEditable ||
+      e.target.getAttribute('data-is-text-input') === 'true'
+    ) {
       return true;
     }
 
     if (e.target instanceof HTMLInputElement) {
       const target = e.target;
-      return target.type === 'text' || target.type === 'number' ||
-          target.type === 'email' || target.type === 'password' ||
-          target.type === 'search' || target.type === 'tel' ||
-          target.type === 'url';
+      return (
+        target.type === 'text' ||
+        target.type === 'number' ||
+        target.type === 'email' ||
+        target.type === 'password' ||
+        target.type === 'search' ||
+        target.type === 'tel' ||
+        target.type === 'url'
+      );
     }
 
     if (e.target instanceof HTMLTextAreaElement) {
@@ -208,7 +209,10 @@ export function isRightButton(e: MouseEvent): boolean {
  * @returns Object with .x and .y properties.
  */
 export function mouseToSvg(
-    e: MouseEvent, svg: SVGSVGElement, matrix: SVGMatrix|null): SVGPoint {
+  e: MouseEvent,
+  svg: SVGSVGElement,
+  matrix: SVGMatrix | null,
+): SVGPoint {
   const svgPoint = svg.createSVGPoint();
   svgPoint.x = e.clientX;
   svgPoint.y = e.clientY;
@@ -225,17 +229,17 @@ export function mouseToSvg(
  * @param e Mouse event.
  * @returns Scroll delta object with .x and .y properties.
  */
-export function getScrollDeltaPixels(e: WheelEvent): {x: number, y: number} {
+export function getScrollDeltaPixels(e: WheelEvent): {x: number; y: number} {
   switch (e.deltaMode) {
-    case 0x00:  // Pixel mode.
+    case 0x00: // Pixel mode.
     default:
       return {x: e.deltaX, y: e.deltaY};
-    case 0x01:  // Line mode.
+    case 0x01: // Line mode.
       return {
         x: e.deltaX * LINE_MODE_MULTIPLIER,
         y: e.deltaY * LINE_MODE_MULTIPLIER,
       };
-    case 0x02:  // Page mode.
+    case 0x02: // Page mode.
       return {
         x: e.deltaX * PAGE_MODE_MULTIPLIER,
         y: e.deltaY * PAGE_MODE_MULTIPLIER,

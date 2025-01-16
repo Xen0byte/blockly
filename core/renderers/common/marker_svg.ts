@@ -4,13 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Methods for graphically rendering a marker as SVG.
- *
- * @class
- */
-import * as goog from '../../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.blockRendering.MarkerSvg');
+// Former goog.module ID: Blockly.blockRendering.MarkerSvg
 
 // Unused import preserved for side-effects. Remove if unneeded.
 import '../../events/events_marker_move.js';
@@ -18,8 +12,10 @@ import '../../events/events_marker_move.js';
 import type {BlockSvg} from '../../block_svg.js';
 import type {Connection} from '../../connection.js';
 import {ConnectionType} from '../../connection_type.js';
+import {EventType} from '../../events/type.js';
 import * as eventUtils from '../../events/utils.js';
 import type {Field} from '../../field.js';
+import {FlyoutButton} from '../../flyout_button.js';
 import type {IASTNodeLocationSvg} from '../../interfaces/i_ast_node_location_svg.js';
 import {ASTNode} from '../../keyboard_nav/ast_node.js';
 import type {Marker} from '../../keyboard_nav/marker.js';
@@ -28,9 +24,7 @@ import * as dom from '../../utils/dom.js';
 import {Svg} from '../../utils/svg.js';
 import * as svgPaths from '../../utils/svg_paths.js';
 import type {WorkspaceSvg} from '../../workspace_svg.js';
-
 import type {ConstantProvider, Notch, PuzzleTab} from './constants.js';
-
 
 /** The name of the CSS class for a cursor. */
 const CURSOR_CLASS = 'blocklyCursor';
@@ -45,29 +39,30 @@ const MARKER_CLASS = 'blocklyMarker';
 const HEIGHT_MULTIPLIER = 3 / 4;
 
 /**
- * Class for a marker.
+ * Class for a marker, containing methods for graphically rendering a marker as
+ * SVG.
  */
 export class MarkerSvg {
   /**
    * The workspace, field, or block that the marker SVG element should be
    * attached to.
    */
-  private parent_: IASTNodeLocationSvg|null = null;
+  protected parent: IASTNodeLocationSvg | null = null;
 
   /** The current SVG element for the marker. */
-  currentMarkerSvg: SVGElement|null = null;
+  currentMarkerSvg: SVGElement | null = null;
   colour_: string;
 
   /** The root SVG group containing the marker. */
-  protected markerSvg_: SVGGElement|null = null;
-  protected svgGroup_: SVGGElement|null = null;
+  protected markerSvg_: SVGGElement | null = null;
+  protected svgGroup_: SVGGElement | null = null;
 
-  protected markerBlock_: SVGPathElement|null = null;
+  protected markerBlock_: SVGPathElement | null = null;
 
-  protected markerInput_: SVGPathElement|null = null;
-  protected markerSvgLine_: SVGRectElement|null = null;
+  protected markerInput_: SVGPathElement | null = null;
+  protected markerSvgLine_: SVGRectElement | null = null;
 
-  protected markerSvgRect_: SVGRectElement|null = null;
+  protected markerSvgRect_: SVGRectElement | null = null;
 
   /** The constants necessary to draw the marker. */
   protected constants_: ConstantProvider;
@@ -78,12 +73,15 @@ export class MarkerSvg {
    * @param marker The marker to draw.
    */
   constructor(
-      private readonly workspace: WorkspaceSvg, constants: ConstantProvider,
-      private readonly marker: Marker) {
+    protected readonly workspace: WorkspaceSvg,
+    constants: ConstantProvider,
+    protected readonly marker: Marker,
+  ) {
     this.constants_ = constants;
 
-    const defaultColour = this.isCursor() ? this.constants_.CURSOR_COLOUR :
-                                            this.constants_.MARKER_COLOUR;
+    const defaultColour = this.isCursor()
+      ? this.constants_.CURSOR_COLOUR
+      : this.constants_.MARKER_COLOUR;
 
     /** The colour of the marker. */
     this.colour_ = marker.colour || defaultColour;
@@ -94,7 +92,7 @@ export class MarkerSvg {
    *
    * @returns The root SVG node.
    */
-  getSvgRoot(): SVGElement|null {
+  getSvgRoot(): SVGElement | null {
     return this.svgGroup_;
   }
 
@@ -121,7 +119,6 @@ export class MarkerSvg {
    * Create the DOM element for the marker.
    *
    * @returns The marker controls SVG group.
-   * @internal
    */
   createDom(): SVGElement {
     const className = this.isCursor() ? CURSOR_CLASS : MARKER_CLASS;
@@ -140,17 +137,17 @@ export class MarkerSvg {
    */
   protected setParent_(newParent: IASTNodeLocationSvg) {
     if (!this.isCursor()) {
-      if (this.parent_) {
-        this.parent_.setMarkerSvg(null);
+      if (this.parent) {
+        this.parent.setMarkerSvg(null);
       }
       newParent.setMarkerSvg(this.getSvgRoot());
     } else {
-      if (this.parent_) {
-        this.parent_.setCursorSvg(null);
+      if (this.parent) {
+        this.parent.setCursorSvg(null);
       }
       newParent.setCursorSvg(this.getSvgRoot());
     }
-    this.parent_ = newParent;
+    this.parent = newParent;
   }
 
   /**
@@ -167,20 +164,23 @@ export class MarkerSvg {
 
     this.constants_ = this.workspace.getRenderer().getConstants();
 
-    const defaultColour = this.isCursor() ? this.constants_.CURSOR_COLOUR :
-                                            this.constants_.MARKER_COLOUR;
+    const defaultColour = this.isCursor()
+      ? this.constants_.CURSOR_COLOUR
+      : this.constants_.MARKER_COLOUR;
     this.colour_ = this.marker.colour || defaultColour;
     this.applyColour_(curNode);
 
     this.showAtLocation_(curNode);
 
-    this.fireMarkerEvent_(oldNode, curNode);
+    this.fireMarkerEvent(oldNode, curNode);
 
     // Ensures the marker will be visible immediately after the move.
     const animate = this.currentMarkerSvg!.childNodes[0];
-    if (animate !== undefined) {
-      (animate as SVGAnimationElement).beginElement &&
-          (animate as SVGAnimationElement).beginElement();
+    if (
+      animate !== undefined &&
+      (animate as SVGAnimationElement).beginElement
+    ) {
+      (animate as SVGAnimationElement).beginElement();
     }
   }
 
@@ -208,6 +208,8 @@ export class MarkerSvg {
       this.showWithCoordinates_(curNode);
     } else if (curNode.getType() === ASTNode.types.STACK) {
       this.showWithStack_(curNode);
+    } else if (curNode.getType() === ASTNode.types.BUTTON) {
+      this.showWithButton_(curNode);
     }
   }
 
@@ -221,7 +223,7 @@ export class MarkerSvg {
    *
    * @param curNode The node to draw the marker for.
    */
-  private showWithBlockPrevOutput_(curNode: ASTNode) {
+  protected showWithBlockPrevOutput(curNode: ASTNode) {
     const block = curNode.getSourceBlock() as BlockSvg;
     const width = block.width;
     const height = block.height;
@@ -229,13 +231,19 @@ export class MarkerSvg {
     const markerOffset = this.constants_.CURSOR_BLOCK_PADDING;
 
     if (block.previousConnection) {
-      const connectionShape =
-          this.constants_.shapeFor(block.previousConnection) as Notch;
+      const connectionShape = this.constants_.shapeFor(
+        block.previousConnection,
+      ) as Notch;
       this.positionPrevious_(
-          width, markerOffset, markerHeight, connectionShape);
+        width,
+        markerOffset,
+        markerHeight,
+        connectionShape,
+      );
     } else if (block.outputConnection) {
-      const connectionShape =
-          this.constants_.shapeFor(block.outputConnection) as PuzzleTab;
+      const connectionShape = this.constants_.shapeFor(
+        block.outputConnection,
+      ) as PuzzleTab;
       this.positionOutput_(width, height, connectionShape);
     } else {
       this.positionBlock_(width, markerOffset, markerHeight);
@@ -250,7 +258,7 @@ export class MarkerSvg {
    * @param curNode The node to draw the marker for.
    */
   protected showWithBlock_(curNode: ASTNode) {
-    this.showWithBlockPrevOutput_(curNode);
+    this.showWithBlockPrevOutput(curNode);
   }
 
   /**
@@ -259,7 +267,7 @@ export class MarkerSvg {
    * @param curNode The node to draw the marker for.
    */
   protected showWithPrevious_(curNode: ASTNode) {
-    this.showWithBlockPrevOutput_(curNode);
+    this.showWithBlockPrevOutput(curNode);
   }
 
   /**
@@ -268,7 +276,7 @@ export class MarkerSvg {
    * @param curNode The node to draw the marker for.
    */
   protected showWithOutput_(curNode: ASTNode) {
-    this.showWithBlockPrevOutput_(curNode);
+    this.showWithBlockPrevOutput(curNode);
   }
 
   /**
@@ -315,7 +323,7 @@ export class MarkerSvg {
    */
   protected showWithInput_(curNode: ASTNode) {
     const connection = curNode.getLocation() as RenderedConnection;
-    const sourceBlock = (connection.getSourceBlock());
+    const sourceBlock = connection.getSourceBlock();
 
     this.positionInput_(connection);
     this.setParent_(sourceBlock);
@@ -330,7 +338,7 @@ export class MarkerSvg {
    */
   protected showWithNext_(curNode: ASTNode) {
     const connection = curNode.getLocation() as RenderedConnection;
-    const targetBlock = (connection.getSourceBlock());
+    const targetBlock = connection.getSourceBlock();
     let x = 0;
     const y = connection.getOffsetInBlock().y;
     const width = targetBlock.getHeightWidth().width;
@@ -375,6 +383,38 @@ export class MarkerSvg {
     this.showCurrent_();
   }
 
+  /**
+   * Position and display the marker for a flyout button.
+   * This is a box with extra padding around the button.
+   *
+   * @param curNode The node to draw the marker for.
+   */
+  protected showWithButton_(curNode: ASTNode) {
+    const button = curNode.getLocation() as FlyoutButton;
+
+    // Gets the height and width of entire stack.
+    const heightWidth = {height: button.height, width: button.width};
+
+    // Add padding so that being on a button looks similar to being on a stack.
+    const width = heightWidth.width + this.constants_.CURSOR_STACK_PADDING;
+    const height = heightWidth.height + this.constants_.CURSOR_STACK_PADDING;
+
+    // Shift the rectangle slightly to upper left so padding is equal on all
+    // sides.
+    const xPadding = -this.constants_.CURSOR_STACK_PADDING / 2;
+    const yPadding = -this.constants_.CURSOR_STACK_PADDING / 2;
+
+    let x = xPadding;
+    const y = yPadding;
+
+    if (this.workspace.RTL) {
+      x = -(width + xPadding);
+    }
+    this.positionRect_(x, y, width, height);
+    this.setParent_(button);
+    this.showCurrent_();
+  }
+
   /** Show the current marker. */
   protected showCurrent_() {
     this.hide();
@@ -396,18 +436,23 @@ export class MarkerSvg {
    * @param markerHeight The height of the marker.
    */
   protected positionBlock_(
-      width: number, markerOffset: number, markerHeight: number) {
-    const markerPath = svgPaths.moveBy(-markerOffset, markerHeight) +
-        svgPaths.lineOnAxis('V', -markerOffset) +
-        svgPaths.lineOnAxis('H', width + markerOffset * 2) +
-        svgPaths.lineOnAxis('V', markerHeight);
+    width: number,
+    markerOffset: number,
+    markerHeight: number,
+  ) {
+    const markerPath =
+      svgPaths.moveBy(-markerOffset, markerHeight) +
+      svgPaths.lineOnAxis('V', -markerOffset) +
+      svgPaths.lineOnAxis('H', width + markerOffset * 2) +
+      svgPaths.lineOnAxis('V', markerHeight);
     if (!this.markerBlock_) {
       throw new Error(
-          'createDom should be called before positioning the marker');
+        'createDom should be called before positioning the marker',
+      );
     }
     this.markerBlock_.setAttribute('d', markerPath);
     if (this.workspace.RTL) {
-      this.flipRtl_(this.markerBlock_);
+      this.flipRtl(this.markerBlock_);
     }
     this.currentMarkerSvg = this.markerBlock_;
   }
@@ -422,14 +467,20 @@ export class MarkerSvg {
     const x = connection.getOffsetInBlock().x;
     const y = connection.getOffsetInBlock().y;
 
-    const path = svgPaths.moveTo(0, 0) +
-        (this.constants_.shapeFor(connection) as PuzzleTab).pathDown;
+    const path =
+      svgPaths.moveTo(0, 0) +
+      (this.constants_.shapeFor(connection) as PuzzleTab).pathDown;
 
     this.markerInput_!.setAttribute('d', path);
     this.markerInput_!.setAttribute(
-        'transform',
-        'translate(' + x + ',' + y + ')' +
-            (this.workspace.RTL ? ' scale(-1 1)' : ''));
+      'transform',
+      'translate(' +
+        x +
+        ',' +
+        y +
+        ')' +
+        (this.workspace.RTL ? ' scale(-1 1)' : ''),
+    );
     this.currentMarkerSvg = this.markerInput_;
   }
 
@@ -460,19 +511,25 @@ export class MarkerSvg {
    * @param connectionShape The shape object for the connection.
    */
   protected positionOutput_(
-      width: number, height: number, connectionShape: PuzzleTab) {
+    width: number,
+    height: number,
+    connectionShape: PuzzleTab,
+  ) {
     if (!this.markerBlock_) {
       throw new Error(
-          'createDom should be called before positioning the output');
+        'createDom should be called before positioning the output',
+      );
     }
-    const markerPath = svgPaths.moveBy(width, 0) +
-        svgPaths.lineOnAxis('h', -(width - connectionShape.width)) +
-        svgPaths.lineOnAxis('v', this.constants_.TAB_OFFSET_FROM_TOP) +
-        connectionShape.pathDown + svgPaths.lineOnAxis('V', height) +
-        svgPaths.lineOnAxis('H', width);
+    const markerPath =
+      svgPaths.moveBy(width, 0) +
+      svgPaths.lineOnAxis('h', -(width - connectionShape.width)) +
+      svgPaths.lineOnAxis('v', this.constants_.TAB_OFFSET_FROM_TOP) +
+      connectionShape.pathDown +
+      svgPaths.lineOnAxis('V', height) +
+      svgPaths.lineOnAxis('H', width);
     this.markerBlock_.setAttribute('d', markerPath);
     if (this.workspace.RTL) {
-      this.flipRtl_(this.markerBlock_);
+      this.flipRtl(this.markerBlock_);
     }
     this.currentMarkerSvg = this.markerBlock_;
   }
@@ -488,21 +545,26 @@ export class MarkerSvg {
    * @param connectionShape The shape object for the connection.
    */
   protected positionPrevious_(
-      width: number, markerOffset: number, markerHeight: number,
-      connectionShape: Notch) {
+    width: number,
+    markerOffset: number,
+    markerHeight: number,
+    connectionShape: Notch,
+  ) {
     if (!this.markerBlock_) {
       throw new Error(
-          'createDom should be called before positioning the previous connection marker');
+        'createDom should be called before positioning the previous connection marker',
+      );
     }
-    const markerPath = svgPaths.moveBy(-markerOffset, markerHeight) +
-        svgPaths.lineOnAxis('V', -markerOffset) +
-        svgPaths.lineOnAxis('H', this.constants_.NOTCH_OFFSET_LEFT) +
-        connectionShape.pathLeft +
-        svgPaths.lineOnAxis('H', width + markerOffset * 2) +
-        svgPaths.lineOnAxis('V', markerHeight);
+    const markerPath =
+      svgPaths.moveBy(-markerOffset, markerHeight) +
+      svgPaths.lineOnAxis('V', -markerOffset) +
+      svgPaths.lineOnAxis('H', this.constants_.NOTCH_OFFSET_LEFT) +
+      connectionShape.pathLeft +
+      svgPaths.lineOnAxis('H', width + markerOffset * 2) +
+      svgPaths.lineOnAxis('V', markerHeight);
     this.markerBlock_.setAttribute('d', markerPath);
     if (this.workspace.RTL) {
-      this.flipRtl_(this.markerBlock_);
+      this.flipRtl(this.markerBlock_);
     }
     this.currentMarkerSvg = this.markerBlock_;
   }
@@ -532,14 +594,18 @@ export class MarkerSvg {
    *
    * @param markerSvg The marker that we want to flip.
    */
-  private flipRtl_(markerSvg: SVGElement) {
+  private flipRtl(markerSvg: SVGElement) {
     markerSvg.setAttribute('transform', 'scale(-1 1)');
   }
 
   /** Hide the marker. */
   hide() {
-    if (!this.markerSvgLine_ || !this.markerSvgRect_ || !this.markerInput_ ||
-        !this.markerBlock_) {
+    if (
+      !this.markerSvgLine_ ||
+      !this.markerSvgRect_ ||
+      !this.markerInput_ ||
+      !this.markerBlock_
+    ) {
       throw new Error('createDom should be called before hiding the marker');
     }
     this.markerSvgLine_.style.display = 'none';
@@ -554,10 +620,14 @@ export class MarkerSvg {
    * @param oldNode The old node the marker used to be on.
    * @param curNode The new node the marker is currently on.
    */
-  private fireMarkerEvent_(oldNode: ASTNode, curNode: ASTNode) {
+  protected fireMarkerEvent(oldNode: ASTNode, curNode: ASTNode) {
     const curBlock = curNode.getSourceBlock();
-    const event = new (eventUtils.get(eventUtils.MARKER_MOVE))(
-        curBlock, this.isCursor(), oldNode, curNode);
+    const event = new (eventUtils.get(EventType.MARKER_MOVE))(
+      curBlock,
+      this.isCursor(),
+      oldNode,
+      curNode,
+    );
     eventUtils.fire(event);
   }
 
@@ -593,46 +663,56 @@ export class MarkerSvg {
         */
 
     this.markerSvg_ = dom.createSvgElement(
-        Svg.G, {
-          'width': this.constants_.CURSOR_WS_WIDTH,
-          'height': this.constants_.WS_CURSOR_HEIGHT,
-        },
-        this.svgGroup_);
+      Svg.G,
+      {
+        'width': this.constants_.CURSOR_WS_WIDTH,
+        'height': this.constants_.WS_CURSOR_HEIGHT,
+      },
+      this.svgGroup_,
+    );
 
     // A horizontal line used to represent a workspace coordinate or next
     // connection.
     this.markerSvgLine_ = dom.createSvgElement(
-        Svg.RECT, {
-          'width': this.constants_.CURSOR_WS_WIDTH,
-          'height': this.constants_.WS_CURSOR_HEIGHT,
-          'style': 'display: none',
-        },
-        this.markerSvg_);
+      Svg.RECT,
+      {
+        'width': this.constants_.CURSOR_WS_WIDTH,
+        'height': this.constants_.WS_CURSOR_HEIGHT,
+      },
+      this.markerSvg_,
+    );
 
     // A filled in rectangle used to represent a stack.
     this.markerSvgRect_ = dom.createSvgElement(
-        Svg.RECT, {
-          'class': 'blocklyVerticalMarker',
-          'rx': 10,
-          'ry': 10,
-          'style': 'display: none',
-        },
-        this.markerSvg_);
+      Svg.RECT,
+      {
+        'class': 'blocklyVerticalMarker',
+        'rx': 10,
+        'ry': 10,
+      },
+      this.markerSvg_,
+    );
 
     // A filled in puzzle piece used to represent an input value.
     this.markerInput_ = dom.createSvgElement(
-        Svg.PATH, {'transform': '', 'style': 'display: none'}, this.markerSvg_);
+      Svg.PATH,
+      {'transform': ''},
+      this.markerSvg_,
+    );
 
     // A path used to represent a previous connection and a block, an output
     // connection and a block, or a block.
     this.markerBlock_ = dom.createSvgElement(
-        Svg.PATH, {
-          'transform': '',
-          'style': 'display: none',
-          'fill': 'none',
-          'stroke-width': this.constants_.CURSOR_STROKE_WIDTH,
-        },
-        this.markerSvg_);
+      Svg.PATH,
+      {
+        'transform': '',
+        'fill': 'none',
+        'stroke-width': this.constants_.CURSOR_STROKE_WIDTH,
+      },
+      this.markerSvg_,
+    );
+
+    this.hide();
 
     // Markers and stack markers don't blink.
     if (this.isCursor()) {
@@ -640,8 +720,10 @@ export class MarkerSvg {
       dom.createSvgElement(Svg.ANIMATE, blinkProperties, this.markerSvgLine_);
       dom.createSvgElement(Svg.ANIMATE, blinkProperties, this.markerInput_);
       dom.createSvgElement(
-          Svg.ANIMATE, {...blinkProperties, attributeName: 'stroke'},
-          this.markerBlock_);
+        Svg.ANIMATE,
+        {...blinkProperties, attributeName: 'stroke'},
+        this.markerBlock_,
+      );
     }
 
     return this.markerSvg_;
@@ -653,10 +735,15 @@ export class MarkerSvg {
    * @param _curNode The node that we want to draw the marker for.
    */
   protected applyColour_(_curNode: ASTNode) {
-    if (!this.markerSvgLine_ || !this.markerSvgRect_ || !this.markerInput_ ||
-        !this.markerBlock_) {
+    if (
+      !this.markerSvgLine_ ||
+      !this.markerSvgRect_ ||
+      !this.markerInput_ ||
+      !this.markerBlock_
+    ) {
       throw new Error(
-          'createDom should be called before applying color to the markerj');
+        'createDom should be called before applying color to the markerj',
+      );
     }
     this.markerSvgLine_.setAttribute('fill', this.colour_);
     this.markerSvgRect_.setAttribute('stroke', this.colour_);

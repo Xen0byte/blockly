@@ -4,14 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Inject Blockly's CSS synchronously.
- *
- * @namespace Blockly.Css
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.Css');
-
+// Former goog.module ID: Blockly.Css
 
 /** Has CSS already been injected? */
 let injected = false;
@@ -86,6 +79,8 @@ let content = `
   position: relative;
   overflow: hidden;  /* So blocks in drag surface disappear at edges */
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .blocklyNonSelectable {
@@ -206,25 +201,21 @@ let content = `
 }
 
 .blocklyDraggable {
-  /* backup for browsers (e.g. IE11) that don't support grab */
-  cursor: url("<<<PATH>>>/handopen.cur"), auto;
   cursor: grab;
   cursor: -webkit-grab;
 }
 
-  /* backup for browsers (e.g. IE11) that don't support grabbing */
 .blocklyDragging {
-  /* backup for browsers (e.g. IE11) that don't support grabbing */
-  cursor: url("<<<PATH>>>/handclosed.cur"), auto;
   cursor: grabbing;
   cursor: -webkit-grabbing;
+  /* Drag surface disables events to not block the toolbox, so we have to
+   * reenable them here for the cursor values to work. */
+  pointer-events: auto;
 }
 
   /* Changes cursor on mouse down. Not effective in Firefox because of
      https://bugzilla.mozilla.org/show_bug.cgi?id=771241 */
 .blocklyDraggable:active {
-  /* backup for browsers (e.g. IE11) that don't support grabbing */
-  cursor: url("<<<PATH>>>/handclosed.cur"), auto;
   cursor: grabbing;
   cursor: -webkit-grabbing;
 }
@@ -260,10 +251,6 @@ let content = `
   stroke: none;
 }
 
-.blocklyMultilineText {
-  font-family: monospace;
-}
-
 .blocklyNonEditableText>text {
   pointer-events: none;
 }
@@ -275,17 +262,6 @@ let content = `
 
 .blocklyText text {
   cursor: default;
-}
-
-/*
-  Don't allow users to select text.  It gets annoying when trying to
-  drag a block and selected text moves instead.
-*/
-.blocklySvg text {
-  user-select: none;
-  -ms-user-select: none;
-  -webkit-user-select: none;
-  cursor: inherit;
 }
 
 .blocklyHidden {
@@ -318,6 +294,7 @@ let content = `
 .blocklyMinimalBody {
   margin: 0;
   padding: 0;
+  height: 100%;
 }
 
 .blocklyHtmlInput {
@@ -331,13 +308,6 @@ let content = `
   text-align: center;
   display: block;
   box-sizing: border-box;
-}
-
-/* Edge and IE introduce a close icon when the input value is longer than a
-   certain length. This affects our sizing calculations of the text input.
-   Hiding the close icon to avoid that. */
-.blocklyHtmlInput::-ms-clear {
-  display: none;
 }
 
 /* Remove the increase and decrease arrows on the field number editor */
@@ -516,5 +486,16 @@ input[type=number] {
 .blocklyMenuItemRtl .blocklyMenuItemCheckbox {
   float: right;
   margin-right: -24px;
+}
+
+.blocklyBlockDragSurface, .blocklyAnimationLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: visible !important;
+  z-index: 80;
+  pointer-events: none;
 }
 `;

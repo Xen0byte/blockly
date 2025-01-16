@@ -4,18 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * The interface for an AST node location that has an associated
- * block.
- *
- * @namespace Blockly.IASTNodeLocationWithBlock
- */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.IASTNodeLocationWithBlock');
+// Former goog.module ID: Blockly.IASTNodeLocationWithBlock
 
-import type {IASTNodeLocation} from './i_ast_node_location.js';
 import type {Block} from '../block.js';
-
+import type {IASTNodeLocation} from './i_ast_node_location.js';
 
 /**
  * An AST node location that has an associated block.
@@ -26,5 +18,5 @@ export interface IASTNodeLocationWithBlock extends IASTNodeLocation {
    *
    * @returns The source block.
    */
-  getSourceBlock(): Block|null;
+  getSourceBlock(): Block | null;
 }

@@ -4,17 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Module that provides constants for use inside Blockly. Do not
- * use these constants outside of the core library.
- *
- * @namespace Blockly.internalConstants
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.internalConstants');
+// Former goog.module ID: Blockly.internalConstants
 
 import {ConnectionType} from './connection_type.js';
-
 
 /**
  * Number of characters to truncate a collapsed block to.
@@ -22,14 +14,6 @@ import {ConnectionType} from './connection_type.js';
  * @internal
  */
 export const COLLAPSE_CHARS = 30;
-
-/**
- * When dragging a block out of a stack, split the stack in two (true), or drag
- * out the block healing the stack (false).
- *
- * @internal
- */
-export const DRAG_STACK = true;
 
 /**
  * Lookup table for determining the opposite type of a connection.
@@ -40,9 +24,9 @@ export const OPPOSITE_TYPE: number[] = [];
 OPPOSITE_TYPE[ConnectionType.INPUT_VALUE] = ConnectionType.OUTPUT_VALUE;
 OPPOSITE_TYPE[ConnectionType.OUTPUT_VALUE] = ConnectionType.INPUT_VALUE;
 OPPOSITE_TYPE[ConnectionType.NEXT_STATEMENT] =
-    ConnectionType.PREVIOUS_STATEMENT;
+  ConnectionType.PREVIOUS_STATEMENT;
 OPPOSITE_TYPE[ConnectionType.PREVIOUS_STATEMENT] =
-    ConnectionType.NEXT_STATEMENT;
+  ConnectionType.NEXT_STATEMENT;
 
 /**
  * String for use in the dropdown created in field_variable.

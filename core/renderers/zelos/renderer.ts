@@ -4,42 +4,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Zelos renderer.
- *
- * @class
- */
-import * as goog from '../../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.zelos.Renderer');
+// Former goog.module ID: Blockly.zelos.Renderer
 
 import type {BlockSvg} from '../../block_svg.js';
-import type {Connection} from '../../connection.js';
 import {ConnectionType} from '../../connection_type.js';
 import {InsertionMarkerManager} from '../../insertion_marker_manager.js';
 import type {Marker} from '../../keyboard_nav/marker.js';
 import type {RenderedConnection} from '../../rendered_connection.js';
 import type {BlockStyle} from '../../theme.js';
+import * as deprecation from '../../utils/deprecation.js';
 import type {WorkspaceSvg} from '../../workspace_svg.js';
 import * as blockRendering from '../common/block_rendering.js';
 import type {RenderInfo as BaseRenderInfo} from '../common/info.js';
 import {Renderer as BaseRenderer} from '../common/renderer.js';
-
 import {ConstantProvider} from './constants.js';
 import {Drawer} from './drawer.js';
 import {RenderInfo} from './info.js';
 import {MarkerSvg} from './marker_svg.js';
 import {PathObject} from './path_object.js';
 
-
 /**
- * The zelos renderer.
+ * The zelos renderer. This renderer emulates Scratch-style and MakeCode-style
+ * rendering.
+ *
+ * Zelos is the ancient Greek spirit of rivalry and emulation.
  */
 export class Renderer extends BaseRenderer {
   protected override constants_!: ConstantProvider;
 
   /**
    * @param name The renderer name.
-   * @internal
    */
   constructor(name: string) {
     super(name);
@@ -72,9 +66,11 @@ export class Renderer extends BaseRenderer {
    *     block.
    * @returns The drawer.
    */
-  protected override makeDrawer_(block: BlockSvg, info: BaseRenderInfo):
-      Drawer {
-    return new Drawer(block, (info as RenderInfo));
+  protected override makeDrawer_(
+    block: BlockSvg,
+    info: BaseRenderInfo,
+  ): Drawer {
+    return new Drawer(block, info as RenderInfo);
   }
 
   /**
@@ -83,10 +79,11 @@ export class Renderer extends BaseRenderer {
    * @param workspace The workspace the cursor belongs to.
    * @param marker The marker.
    * @returns The object in charge of drawing the marker.
-   * @internal
    */
-  override makeMarkerDrawer(workspace: WorkspaceSvg, marker: Marker):
-      MarkerSvg {
+  override makeMarkerDrawer(
+    workspace: WorkspaceSvg,
+    marker: Marker,
+  ): MarkerSvg {
     return new MarkerSvg(workspace, this.getConstants(), marker);
   }
 
@@ -96,11 +93,9 @@ export class Renderer extends BaseRenderer {
    * @param root The root SVG element.
    * @param style The style object to use for colouring.
    * @returns The renderer path object.
-   * @internal
    */
   override makePathObject(root: SVGElement, style: BlockStyle): PathObject {
-    return new PathObject(
-        root, style, (this.getConstants() as ConstantProvider));
+    return new PathObject(root, style, this.getConstants() as ConstantProvider);
   }
 
   /**
@@ -113,14 +108,21 @@ export class Renderer extends BaseRenderer {
     return this.constants_;
   }
 
-  override shouldHighlightConnection(conn: Connection) {
-    return conn.type !== ConnectionType.INPUT_VALUE &&
-        conn.type !== ConnectionType.OUTPUT_VALUE;
-  }
-
+  /**
+   * @deprecated v10 - This function is no longer respected. A custom
+   *    IConnectionPreviewer may be able to fulfill the functionality.
+   */
   override getConnectionPreviewMethod(
-      closest: RenderedConnection, local: RenderedConnection,
-      topBlock: BlockSvg) {
+    closest: RenderedConnection,
+    local: RenderedConnection,
+    topBlock: BlockSvg,
+  ) {
+    deprecation.warn(
+      'getConnectionPreviewMethod',
+      'v10',
+      'v12',
+      'an IConnectionPreviewer, if it fulfills your use case.',
+    );
     if (local.type === ConnectionType.OUTPUT_VALUE) {
       if (!closest.isConnected()) {
         return InsertionMarkerManager.PREVIEW_TYPE.INPUT_OUTLINE;

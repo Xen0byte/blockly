@@ -9,38 +9,49 @@
  *
  * @class
  */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.FieldInput');
+// Former goog.module ID: Blockly.FieldInput
 
 // Unused import preserved for side-effects. Remove if unneeded.
 import './events/events_block_change.js';
 
-import type {BlockSvg} from './block_svg.js';
+import {BlockSvg} from './block_svg.js';
 import * as browserEvents from './browser_events.js';
+import * as bumpObjects from './bump_objects.js';
 import * as dialog from './dialog.js';
-import * as dom from './utils/dom.js';
 import * as dropDownDiv from './dropdowndiv.js';
+import {EventType} from './events/type.js';
 import * as eventUtils from './events/utils.js';
-import {Field, FieldConfig, FieldValidator, UnattachedFieldError} from './field.js';
+import {
+  Field,
+  FieldConfig,
+  FieldValidator,
+  UnattachedFieldError,
+} from './field.js';
 import {Msg} from './msg.js';
+import * as renderManagement from './render_management.js';
 import * as aria from './utils/aria.js';
-import {Coordinate} from './utils/coordinate.js';
-import {KeyCodes} from './utils/keycodes.js';
-import type {Sentinel} from './utils/sentinel.js';
+import * as dom from './utils/dom.js';
+import {Size} from './utils/size.js';
 import * as userAgent from './utils/useragent.js';
 import * as WidgetDiv from './widgetdiv.js';
 import type {WorkspaceSvg} from './workspace_svg.js';
 
-export type InputTypes = string|number;
-export type FieldInputValidator<T extends InputTypes> =
-    FieldValidator<string|T>;
+/**
+ * Supported types for FieldInput subclasses.
+ *
+ * @internal
+ */
+type InputTypes = string | number;
 
 /**
  * Abstract class for an editable input field.
  *
  * @typeParam T - The value stored on the field.
+ * @internal
  */
-export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
+export abstract class FieldInput<T extends InputTypes> extends Field<
+  string | T
+> {
   /**
    * Pixel size of input border radius.
    * Should match blocklyText's border-radius in CSS.
@@ -51,7 +62,7 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
   protected spellcheck_ = true;
 
   /** The HTML input element. */
-  protected htmlInput_: HTMLInputElement|null = null;
+  protected htmlInput_: HTMLInputElement | null = null;
 
   /** True if the field's value is currently being edited via the UI. */
   protected isBeingEdited_ = false;
@@ -61,20 +72,27 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    */
   protected isTextValid_ = false;
 
+  /**
+   * The intial value of the field when the user opened an editor to change its
+   * value. When the editor is disposed, an event will be fired that uses this
+   * as the event's oldValue.
+   */
+  protected valueWhenEditorWasOpened_: string | T | null = null;
+
   /** Key down event data. */
-  private onKeyDownWrapper_: browserEvents.Data|null = null;
+  private onKeyDownWrapper: browserEvents.Data | null = null;
 
   /** Key input event data. */
-  private onKeyInputWrapper_: browserEvents.Data|null = null;
+  private onKeyInputWrapper: browserEvents.Data | null = null;
 
   /**
    * Whether the field should consider the whole parent block to be its click
    * target.
    */
-  fullBlockClickTarget_: boolean|null = false;
+  fullBlockClickTarget_: boolean = false;
 
   /** The workspace that this field belongs to. */
-  protected workspace_: WorkspaceSvg|null = null;
+  protected workspace_: WorkspaceSvg | null = null;
 
   /**
    * Serializable fields are saved by the serializer, non-serializable fields
@@ -86,31 +104,33 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
   override CURSOR = 'text';
 
   /**
-   * @param opt_value The initial value of the field. Should cast to a string.
+   * @param value The initial value of the field. Should cast to a string.
    *     Defaults to an empty string if null or undefined. Also accepts
    *     Field.SKIP_SETUP if you wish to skip setup (only used by subclasses
    *     that want to handle configuration and setting the field value after
    *     their own constructors have run).
-   * @param opt_validator A function that is called to validate changes to the
+   * @param validator A function that is called to validate changes to the
    *     field's value. Takes in a string & returns a validated string, or null
    *     to abort the change.
-   * @param opt_config A map of options used to configure the field.
+   * @param config A map of options used to configure the field.
    *     See the [field creation documentation]{@link
    * https://developers.google.com/blockly/guides/create-custom-blocks/fields/built-in-fields/text-input#creation}
    * for a list of properties this parameter supports.
    */
   constructor(
-      opt_value?: string|Sentinel, opt_validator?: FieldInputValidator<T>|null,
-      opt_config?: FieldInputConfig) {
+    value?: string | typeof Field.SKIP_SETUP,
+    validator?: FieldInputValidator<T> | null,
+    config?: FieldInputConfig,
+  ) {
     super(Field.SKIP_SETUP);
 
-    if (Field.isSentinel(opt_value)) return;
-    if (opt_config) {
-      this.configure_(opt_config);
+    if (value === Field.SKIP_SETUP) return;
+    if (config) {
+      this.configure_(config);
     }
-    this.setValue(opt_value);
-    if (opt_validator) {
-      this.setValidator(opt_validator);
+    this.setValue(value);
+    if (validator) {
+      this.setValidator(validator);
     }
   }
 
@@ -121,40 +141,24 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
     }
   }
 
-  /** @internal */
   override initView() {
     const block = this.getSourceBlock();
-    if (!block) {
-      throw new UnattachedFieldError();
-    }
-    if (this.getConstants()!.FULL_BLOCK_FIELDS) {
-      // Step one: figure out if this is the only field on this block.
-      // Rendering is quite different in that case.
-      let nFields = 0;
-      let nConnections = 0;
-      // Count the number of fields, excluding text fields
-      for (let i = 0, input; input = block.inputList[i]; i++) {
-        for (let j = 0; input.fieldRow[j]; j++) {
-          nFields++;
-        }
-        if (input.connection) {
-          nConnections++;
-        }
-      }
-      // The special case is when this is the only non-label field on the block
-      // and it has an output but no inputs.
-      this.fullBlockClickTarget_ =
-          nFields <= 1 && block.outputConnection && !nConnections;
-    } else {
-      this.fullBlockClickTarget_ = false;
-    }
+    if (!block) throw new UnattachedFieldError();
+    super.initView();
 
-    if (this.fullBlockClickTarget_) {
+    if (this.isFullBlockField()) {
       this.clickTarget_ = (this.sourceBlock_ as BlockSvg).getSvgRoot();
-    } else {
-      this.createBorderRect_();
     }
-    this.createTextElement_();
+  }
+
+  protected override isFullBlockField(): boolean {
+    const block = this.getSourceBlock();
+    if (!block) throw new UnattachedFieldError();
+
+    // Side effect for backwards compatibility.
+    this.fullBlockClickTarget_ =
+      !!this.getConstants()?.FULL_BLOCK_FIELDS && block.isSimpleReporter();
+    return this.fullBlockClickTarget_;
   }
 
   /**
@@ -163,20 +167,35 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    * value while allowing the display text to be handled by the htmlInput_.
    *
    * @param _invalidValue The input value that was determined to be invalid.
-   *    This is not used by the text input because its display value is stored
-   * on the htmlInput_.
+   *     This is not used by the text input because its display value is stored
+   *     on the htmlInput_.
+   * @param fireChangeEvent Whether to fire a change event if the value changes.
    */
-  protected override doValueInvalid_(_invalidValue: AnyDuringMigration) {
+  protected override doValueInvalid_(
+    _invalidValue: AnyDuringMigration,
+    fireChangeEvent: boolean = true,
+  ) {
     if (this.isBeingEdited_) {
       this.isDirty_ = true;
       this.isTextValid_ = false;
       const oldValue = this.value_;
       // Revert value when the text becomes invalid.
-      this.value_ = this.htmlInput_!.getAttribute('data-untyped-default-value');
-      if (this.sourceBlock_ && eventUtils.isEnabled()) {
-        eventUtils.fire(new (eventUtils.get(eventUtils.BLOCK_CHANGE))(
-            this.sourceBlock_, 'field', this.name || null, oldValue,
-            this.value_));
+      this.value_ = this.valueWhenEditorWasOpened_;
+      if (
+        this.sourceBlock_ &&
+        eventUtils.isEnabled() &&
+        this.value_ !== oldValue &&
+        fireChangeEvent
+      ) {
+        eventUtils.fire(
+          new (eventUtils.get(EventType.BLOCK_CHANGE))(
+            this.sourceBlock_,
+            'field',
+            this.name || null,
+            oldValue,
+            this.value_,
+          ),
+        );
       }
     }
   }
@@ -189,7 +208,7 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    * @param newValue The value to be saved. The default validator guarantees
    *     that this is a string.
    */
-  protected override doValueUpdate_(newValue: string|T) {
+  protected override doValueUpdate_(newValue: string | T) {
     this.isDirty_ = true;
     this.isTextValid_ = true;
     this.value_ = newValue;
@@ -197,32 +216,70 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
 
   /**
    * Updates text field to match the colour/style of the block.
-   *
-   * @internal
    */
   override applyColour() {
-    if (!this.sourceBlock_ || !this.getConstants()!.FULL_BLOCK_FIELDS) return;
+    const block = this.getSourceBlock() as BlockSvg | null;
+    if (!block) throw new UnattachedFieldError();
 
-    const source = this.sourceBlock_ as BlockSvg;
+    if (!this.getConstants()!.FULL_BLOCK_FIELDS) return;
+    if (!this.fieldGroup_) return;
 
-    if (this.borderRect_) {
-      this.borderRect_.setAttribute('stroke', source.style.colourTertiary);
+    if (!this.isFullBlockField() && this.borderRect_) {
+      this.borderRect_!.style.display = 'block';
+      this.borderRect_.setAttribute('stroke', block.getColourTertiary());
     } else {
-      source.pathObject.svgPath.setAttribute(
-          'fill', this.getConstants()!.FIELD_BORDER_RECT_COLOUR);
+      this.borderRect_!.style.display = 'none';
+      // In general, do *not* let fields control the color of blocks. Having the
+      // field control the color is unexpected, and could have performance
+      // impacts.
+      block.pathObject.svgPath.setAttribute(
+        'fill',
+        this.getConstants()!.FIELD_BORDER_RECT_COLOUR,
+      );
     }
+  }
+
+  /**
+   * Returns the height and width of the field.
+   *
+   * This should *in general* be the only place render_ gets called from.
+   *
+   * @returns Height and width.
+   */
+  override getSize(): Size {
+    if (this.getConstants()?.FULL_BLOCK_FIELDS) {
+      // In general, do *not* let fields control the color of blocks. Having the
+      // field control the color is unexpected, and could have performance
+      // impacts.
+      // Full block fields have more control of the block than they should
+      // (i.e. updating fill colour). Whenever we get the size, the field may
+      // no longer be a full-block field, so we need to rerender.
+      this.render_();
+      this.isDirty_ = false;
+    }
+    return super.getSize();
+  }
+
+  /**
+   * Notifies the field that it has changed locations. Moves the widget div to
+   * be in the correct place if it is open.
+   */
+  onLocationChange(): void {
+    if (this.isBeingEdited_) this.resizeEditor_();
   }
 
   /**
    * Updates the colour of the htmlInput given the current validity of the
    * field's value.
+   *
+   * Also updates the colour of the block to reflect whether this is a full
+   * block field or not.
    */
   protected override render_() {
     super.render_();
     // This logic is done in render_ rather than doValueInvalid_ or
     // doValueUpdate_ so that the code is more centralized.
     if (this.isBeingEdited_) {
-      this.resizeEditor_();
       const htmlInput = this.htmlInput_ as HTMLElement;
       if (!this.isTextValid_) {
         dom.addClass(htmlInput, 'blocklyInvalidInput');
@@ -232,6 +289,15 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
         aria.setState(htmlInput, aria.State.INVALID, false);
       }
     }
+
+    const block = this.getSourceBlock() as BlockSvg | null;
+    if (!block) throw new UnattachedFieldError();
+    // In general, do *not* let fields control the color of blocks. Having the
+    // field control the color is unexpected, and could have performance
+    // impacts.
+    // Whenever we render, the field may no longer be a full-block-field so
+    // we need to update the colour.
+    if (this.getConstants()!.FULL_BLOCK_FIELDS) block.applyColour();
   }
 
   /**
@@ -248,7 +314,9 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
       // AnyDuringMigration because:  Argument of type 'boolean' is not
       // assignable to parameter of type 'string'.
       this.htmlInput_.setAttribute(
-          'spellcheck', this.spellcheck_ as AnyDuringMigration);
+        'spellcheck',
+        this.spellcheck_ as AnyDuringMigration,
+      );
     }
   }
 
@@ -258,19 +326,21 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    * Shows a prompt editor for mobile browsers if the modalInputs option is
    * enabled.
    *
-   * @param _opt_e Optional mouse event that triggered the field to open, or
+   * @param _e Optional mouse event that triggered the field to open, or
    *     undefined if triggered programmatically.
-   * @param opt_quietInput True if editor should be created without focus.
+   * @param quietInput True if editor should be created without focus.
    *     Defaults to false.
    */
-  protected override showEditor_(_opt_e?: Event, opt_quietInput?: boolean) {
+  protected override showEditor_(_e?: Event, quietInput = false) {
     this.workspace_ = (this.sourceBlock_ as BlockSvg).workspace;
-    const quietInput = opt_quietInput || false;
-    if (!quietInput && this.workspace_.options.modalInputs &&
-        (userAgent.MOBILE || userAgent.ANDROID || userAgent.IPAD)) {
-      this.showPromptEditor_();
+    if (
+      !quietInput &&
+      this.workspace_.options.modalInputs &&
+      (userAgent.MOBILE || userAgent.ANDROID || userAgent.IPAD)
+    ) {
+      this.showPromptEditor();
     } else {
-      this.showInlineEditor_(quietInput);
+      this.showInlineEditor(quietInput);
     }
   }
 
@@ -279,14 +349,18 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    * Mobile browsers may have issues with in-line textareas (focus and
    * keyboards).
    */
-  private showPromptEditor_() {
+  private showPromptEditor() {
     dialog.prompt(
-        Msg['CHANGE_VALUE_TITLE'], this.getText(), (text: string|null) => {
-          // Text is null if user pressed cancel button.
-          if (text !== null) {
-            this.setValue(this.getValueFromEditorText_(text));
-          }
-        });
+      Msg['CHANGE_VALUE_TITLE'],
+      this.getText(),
+      (text: string | null) => {
+        // Text is null if user pressed cancel button.
+        if (text !== null) {
+          this.setValue(this.getValueFromEditorText_(text));
+        }
+        this.onFinishEditing_(this.value_);
+      },
+    );
   }
 
   /**
@@ -294,14 +368,20 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    *
    * @param quietInput True if editor should be created without focus.
    */
-  private showInlineEditor_(quietInput: boolean) {
+  private showInlineEditor(quietInput: boolean) {
     const block = this.getSourceBlock();
     if (!block) {
       throw new UnattachedFieldError();
     }
-    WidgetDiv.show(this, block.RTL, this.widgetDispose_.bind(this));
+    WidgetDiv.show(
+      this,
+      block.RTL,
+      this.widgetDispose_.bind(this),
+      this.workspace_,
+    );
     this.htmlInput_ = this.widgetCreate_() as HTMLInputElement;
     this.isBeingEdited_ = true;
+    this.valueWhenEditorWasOpened_ = this.value_;
 
     if (!quietInput) {
       (this.htmlInput_ as HTMLElement).focus({
@@ -316,7 +396,7 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    *
    * @returns The newly created text input editor.
    */
-  protected widgetCreate_(): HTMLElement {
+  protected widgetCreate_(): HTMLInputElement | HTMLTextAreaElement {
     const block = this.getSourceBlock();
     if (!block) {
       throw new UnattachedFieldError();
@@ -328,33 +408,35 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
     if (!clickTarget) throw new Error('A click target has not been set.');
     dom.addClass(clickTarget, 'editing');
 
-    const htmlInput = (document.createElement('input'));
+    const htmlInput = document.createElement('input');
     htmlInput.className = 'blocklyHtmlInput';
     // AnyDuringMigration because:  Argument of type 'boolean' is not assignable
     // to parameter of type 'string'.
     htmlInput.setAttribute(
-        'spellcheck', this.spellcheck_ as AnyDuringMigration);
+      'spellcheck',
+      this.spellcheck_ as AnyDuringMigration,
+    );
     const scale = this.workspace_!.getScale();
     const fontSize = this.getConstants()!.FIELD_TEXT_FONTSIZE * scale + 'pt';
     div!.style.fontSize = fontSize;
     htmlInput.style.fontSize = fontSize;
     let borderRadius = FieldInput.BORDERRADIUS * scale + 'px';
 
-    if (this.fullBlockClickTarget_) {
+    if (this.isFullBlockField()) {
       const bBox = this.getScaledBBox();
 
       // Override border radius.
       borderRadius = (bBox.bottom - bBox.top) / 2 + 'px';
       // Pull stroke colour from the existing shadow block
-      const strokeColour = block.getParent() ?
-          (block.getParent() as BlockSvg).style.colourTertiary :
-          (this.sourceBlock_ as BlockSvg).style.colourTertiary;
+      const strokeColour = block.getParent()
+        ? (block.getParent() as BlockSvg).getColourTertiary()
+        : (this.sourceBlock_ as BlockSvg).getColourTertiary();
       htmlInput.style.border = 1 * scale + 'px solid ' + strokeColour;
       div!.style.borderRadius = borderRadius;
       div!.style.transition = 'box-shadow 0.25s ease 0s';
       if (this.getConstants()!.FIELD_TEXTINPUT_BOX_SHADOW) {
         div!.style.boxShadow =
-            'rgba(255, 255, 255, 0.3) 0 0 0 ' + 4 * scale + 'px';
+          'rgba(255, 255, 255, 0.3) 0 0 0 ' + 4 * scale + 'px';
       }
     }
     htmlInput.style.borderRadius = borderRadius;
@@ -382,6 +464,29 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
     // Make sure the field's node matches the field's internal value.
     this.forceRerender();
     this.onFinishEditing_(this.value_);
+
+    if (
+      this.sourceBlock_ &&
+      eventUtils.isEnabled() &&
+      this.valueWhenEditorWasOpened_ !== null &&
+      this.valueWhenEditorWasOpened_ !== this.value_
+    ) {
+      // When closing a field input widget, fire an event indicating that the
+      // user has completed a sequence of changes. The value may have changed
+      // multiple times while the editor was open, but this will fire an event
+      // containing the value when the editor was opened as well as the new one.
+      eventUtils.fire(
+        new (eventUtils.get(EventType.BLOCK_CHANGE))(
+          this.sourceBlock_,
+          'field',
+          this.name || null,
+          this.valueWhenEditorWasOpened_,
+          this.value_,
+        ),
+      );
+      this.valueWhenEditorWasOpened_ = null;
+    }
+
     eventUtils.setGroup(false);
 
     // Actual disposal.
@@ -405,8 +510,6 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    * @param _value The new value of the field.
    */
   onFinishEditing_(_value: AnyDuringMigration) {}
-  // NOP by default.
-  // TODO(#2496): Support people passing a func into the field.
 
   /**
    * Bind handlers for user input on the text input field's editor.
@@ -415,22 +518,30 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    */
   protected bindInputEvents_(htmlInput: HTMLElement) {
     // Trap Enter without IME and Esc to hide.
-    this.onKeyDownWrapper_ = browserEvents.conditionalBind(
-        htmlInput, 'keydown', this, this.onHtmlInputKeyDown_);
+    this.onKeyDownWrapper = browserEvents.conditionalBind(
+      htmlInput,
+      'keydown',
+      this,
+      this.onHtmlInputKeyDown_,
+    );
     // Resize after every input change.
-    this.onKeyInputWrapper_ = browserEvents.conditionalBind(
-        htmlInput, 'input', this, this.onHtmlInputChange_);
+    this.onKeyInputWrapper = browserEvents.conditionalBind(
+      htmlInput,
+      'input',
+      this,
+      this.onHtmlInputChange,
+    );
   }
 
   /** Unbind handlers for user input and workspace size changes. */
   protected unbindInputEvents_() {
-    if (this.onKeyDownWrapper_) {
-      browserEvents.unbind(this.onKeyDownWrapper_);
-      this.onKeyDownWrapper_ = null;
+    if (this.onKeyDownWrapper) {
+      browserEvents.unbind(this.onKeyDownWrapper);
+      this.onKeyDownWrapper = null;
     }
-    if (this.onKeyInputWrapper_) {
-      browserEvents.unbind(this.onKeyInputWrapper_);
-      this.onKeyInputWrapper_ = null;
+    if (this.onKeyInputWrapper) {
+      browserEvents.unbind(this.onKeyInputWrapper);
+      this.onKeyInputWrapper = null;
     }
   }
 
@@ -440,16 +551,18 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    * @param e Keyboard event.
    */
   protected onHtmlInputKeyDown_(e: KeyboardEvent) {
-    if (e.keyCode === KeyCodes.ENTER) {
-      WidgetDiv.hide();
+    if (e.key === 'Enter') {
+      WidgetDiv.hideIfOwner(this);
       dropDownDiv.hideWithoutAnimation();
-    } else if (e.keyCode === KeyCodes.ESC) {
+    } else if (e.key === 'Escape') {
       this.setValue(
-          this.htmlInput_!.getAttribute('data-untyped-default-value'));
-      WidgetDiv.hide();
+        this.htmlInput_!.getAttribute('data-untyped-default-value'),
+        false,
+      );
+      WidgetDiv.hideIfOwner(this);
       dropDownDiv.hideWithoutAnimation();
-    } else if (e.keyCode === KeyCodes.TAB) {
-      WidgetDiv.hide();
+    } else if (e.key === 'Tab') {
+      WidgetDiv.hideIfOwner(this);
       dropDownDiv.hideWithoutAnimation();
       (this.sourceBlock_ as BlockSvg).tab(this, !e.shiftKey);
       e.preventDefault();
@@ -461,8 +574,33 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    *
    * @param _e Keyboard event.
    */
-  private onHtmlInputChange_(_e: Event) {
-    this.setValue(this.getValueFromEditorText_(this.htmlInput_!.value));
+  private onHtmlInputChange(_e: Event) {
+    // Intermediate value changes from user input are not confirmed until the
+    // user closes the editor, and may be numerous. Inhibit reporting these as
+    // normal block change events, and instead report them as special
+    // intermediate changes that do not get recorded in undo history.
+    const oldValue = this.value_;
+    // Change the field's value without firing the normal change event.
+    this.setValue(
+      this.getValueFromEditorText_(this.htmlInput_!.value),
+      /* fireChangeEvent= */ false,
+    );
+    if (
+      this.sourceBlock_ &&
+      eventUtils.isEnabled() &&
+      this.value_ !== oldValue
+    ) {
+      // Fire a special event indicating that the value changed but the change
+      // isn't complete yet and normal field change listeners can wait.
+      eventUtils.fire(
+        new (eventUtils.get(EventType.BLOCK_FIELD_INTERMEDIATE_CHANGE))(
+          this.sourceBlock_,
+          this.name || null,
+          oldValue,
+          this.value_,
+        ),
+      );
+    }
   }
 
   /**
@@ -471,8 +609,14 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    * value whilst editing.
    *
    * @param newValue New value.
+   * @param fireChangeEvent Whether to fire a change event. Defaults to true.
+   *     Should usually be true unless the change will be reported some other
+   *     way, e.g. an intermediate field change event.
    */
-  protected setEditorValue_(newValue: AnyDuringMigration) {
+  protected setEditorValue_(
+    newValue: AnyDuringMigration,
+    fireChangeEvent = true,
+  ) {
     this.isDirty_ = true;
     if (this.isBeingEdited_) {
       // In the case this method is passed an invalid value, we still
@@ -481,27 +625,52 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
       // with what's shown to the user.
       this.htmlInput_!.value = this.getEditorText_(newValue);
     }
-    this.setValue(newValue);
+    this.setValue(newValue, fireChangeEvent);
   }
 
   /** Resize the editor to fit the text. */
   protected resizeEditor_() {
-    const block = this.getSourceBlock();
-    if (!block) {
-      throw new UnattachedFieldError();
-    }
-    const div = WidgetDiv.getDiv();
-    const bBox = this.getScaledBBox();
-    div!.style.width = bBox.right - bBox.left + 'px';
-    div!.style.height = bBox.bottom - bBox.top + 'px';
+    renderManagement.finishQueuedRenders().then(() => {
+      const block = this.getSourceBlock();
+      if (!block) throw new UnattachedFieldError();
+      const div = WidgetDiv.getDiv();
+      const bBox = this.getScaledBBox();
+      div!.style.width = bBox.right - bBox.left + 'px';
+      div!.style.height = bBox.bottom - bBox.top + 'px';
 
-    // In RTL mode block fields and LTR input fields the left edge moves,
-    // whereas the right edge is fixed.  Reposition the editor.
-    const x = block.RTL ? bBox.right - div!.offsetWidth : bBox.left;
-    const xy = new Coordinate(x, bBox.top);
+      // In RTL mode block fields and LTR input fields the left edge moves,
+      // whereas the right edge is fixed.  Reposition the editor.
+      const x = block.RTL ? bBox.right - div!.offsetWidth : bBox.left;
+      const y = bBox.top;
 
-    div!.style.left = xy.x + 'px';
-    div!.style.top = xy.y + 'px';
+      div!.style.left = `${x}px`;
+      div!.style.top = `${y}px`;
+    });
+  }
+
+  /**
+   * Handles repositioning the WidgetDiv used for input fields when the
+   * workspace is resized. Will bump the block into the viewport and update the
+   * position of the text input if necessary.
+   *
+   * @returns True for rendered workspaces, as we never want to hide the widget
+   *     div.
+   */
+  override repositionForWindowResize(): boolean {
+    const block = this.getSourceBlock()?.getRootBlock();
+    // This shouldn't be possible. We should never have a WidgetDiv if not using
+    // rendered blocks.
+    if (!(block instanceof BlockSvg)) return false;
+
+    const bumped = bumpObjects.bumpIntoBounds(
+      this.workspace_!,
+      this.workspace_!.getMetricsManager().getViewMetrics(true),
+      block,
+    );
+
+    if (!bumped) this.resizeEditor_();
+
+    return true;
   }
 
   /**
@@ -521,7 +690,7 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    *
    * @returns The HTML value if we're editing, otherwise null.
    */
-  protected override getText_(): string|null {
+  protected override getText_(): string | null {
     if (this.isBeingEdited_ && this.htmlInput_) {
       // We are currently editing, return the HTML input value instead.
       return this.htmlInput_.value;
@@ -539,7 +708,7 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
    * @returns The text to show on the HTML input.
    */
   protected getEditorText_(value: AnyDuringMigration): string {
-    return String(value);
+    return `${value}`;
   }
 
   /**
@@ -559,7 +728,29 @@ export abstract class FieldInput<T extends InputTypes> extends Field<string|T> {
 
 /**
  * Config options for the input field.
+ *
+ * @internal
  */
 export interface FieldInputConfig extends FieldConfig {
   spellcheck?: boolean;
 }
+
+/**
+ * A function that is called to validate changes to the field's value before
+ * they are set.
+ *
+ * @see {@link https://developers.google.com/blockly/guides/create-custom-blocks/fields/validators#return_values}
+ * @param newValue The value to be validated.
+ * @returns One of three instructions for setting the new value: `T`, `null`,
+ * or `undefined`.
+ *
+ * - `T` to set this function's returned value instead of `newValue`.
+ *
+ * - `null` to invoke `doValueInvalid_` and not set a value.
+ *
+ * - `undefined` to set `newValue` as is.
+ * @internal
+ */
+export type FieldInputValidator<T extends InputTypes> = FieldValidator<
+  string | T
+>;

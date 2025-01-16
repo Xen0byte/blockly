@@ -4,19 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Zelos specific objects representing elements in a row of a
- * rendered block.
- *
- * @class
- */
-import * as goog from '../../../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.zelos.RightConnectionShape');
+// Former goog.module ID: Blockly.zelos.RightConnectionShape
 
 import type {ConstantProvider} from '../../../renderers/common/constants.js';
 import {Measurable} from '../../../renderers/measurables/base.js';
 import {Types} from '../../../renderers/measurables/types.js';
-
 
 /**
  * An object containing information about the space a right connection shape
@@ -29,7 +21,6 @@ export class RightConnectionShape extends Measurable {
 
   /**
    * @param constants The rendering constants provider.
-   * @internal
    */
   constructor(constants: ConstantProvider) {
     super(constants);

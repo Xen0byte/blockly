@@ -9,12 +9,11 @@
  *
  * @class
  */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.ContextMenuRegistry');
+// Former goog.module ID: Blockly.ContextMenuRegistry
 
 import type {BlockSvg} from './block_svg.js';
+import {RenderedWorkspaceComment} from './comments/rendered_workspace_comment.js';
 import type {WorkspaceSvg} from './workspace_svg.js';
-
 
 /**
  * Class for the registry of context menu items. This is intended to be a
@@ -24,7 +23,7 @@ import type {WorkspaceSvg} from './workspace_svg.js';
 export class ContextMenuRegistry {
   static registry: ContextMenuRegistry;
   /** Registry of all registered RegistryItems, keyed by ID. */
-  private registry_ = new Map<string, RegistryItem>();
+  private registeredItems = new Map<string, RegistryItem>();
 
   /** Resets the existing singleton instance of ContextMenuRegistry. */
   constructor() {
@@ -33,7 +32,7 @@ export class ContextMenuRegistry {
 
   /** Clear and recreate the registry. */
   reset() {
-    this.registry_.clear();
+    this.registeredItems.clear();
   }
 
   /**
@@ -43,10 +42,10 @@ export class ContextMenuRegistry {
    * @throws {Error} if an item with the given ID already exists.
    */
   register(item: RegistryItem) {
-    if (this.registry_.has(item.id)) {
+    if (this.registeredItems.has(item.id)) {
       throw Error('Menu item with ID "' + item.id + '" is already registered.');
     }
-    this.registry_.set(item.id, item);
+    this.registeredItems.set(item.id, item);
   }
 
   /**
@@ -56,18 +55,18 @@ export class ContextMenuRegistry {
    * @throws {Error} if an item with the given ID does not exist.
    */
   unregister(id: string) {
-    if (!this.registry_.has(id)) {
+    if (!this.registeredItems.has(id)) {
       throw new Error('Menu item with ID "' + id + '" not found.');
     }
-    this.registry_.delete(id);
+    this.registeredItems.delete(id);
   }
 
   /**
    * @param id The ID of the RegistryItem to get.
    * @returns RegistryItem or null if not found
    */
-  getItem(id: string): RegistryItem|null {
-    return this.registry_.get(id) ?? null;
+  getItem(id: string): RegistryItem | null {
+    return this.registeredItems.get(id) ?? null;
   }
 
   /**
@@ -81,16 +80,19 @@ export class ContextMenuRegistry {
    *     block being clicked on)
    * @returns the list of ContextMenuOptions
    */
-  getContextMenuOptions(scopeType: ScopeType, scope: Scope):
-      ContextMenuOption[] {
+  getContextMenuOptions(
+    scopeType: ScopeType,
+    scope: Scope,
+  ): ContextMenuOption[] {
     const menuOptions: ContextMenuOption[] = [];
-    for (const item of this.registry_.values()) {
+    for (const item of this.registeredItems.values()) {
       if (scopeType === item.scopeType) {
         const precondition = item.preconditionFn(scope);
         if (precondition !== 'hidden') {
-          const displayText = typeof item.displayText === 'function' ?
-              item.displayText(scope) :
-              item.displayText;
+          const displayText =
+            typeof item.displayText === 'function'
+              ? item.displayText(scope)
+              : item.displayText;
           const menuOption: ContextMenuOption = {
             text: displayText,
             enabled: precondition === 'enabled',
@@ -102,7 +104,7 @@ export class ContextMenuRegistry {
         }
       }
     }
-    menuOptions.sort(function(a, b) {
+    menuOptions.sort(function (a, b) {
       return a.weight - b.weight;
     });
     return menuOptions;
@@ -118,6 +120,7 @@ export namespace ContextMenuRegistry {
   export enum ScopeType {
     BLOCK = 'block',
     WORKSPACE = 'workspace',
+    COMMENT = 'comment',
   }
 
   /**
@@ -127,15 +130,22 @@ export namespace ContextMenuRegistry {
   export interface Scope {
     block?: BlockSvg;
     workspace?: WorkspaceSvg;
+    comment?: RenderedWorkspaceComment;
   }
 
   /**
    * A menu item as entered in the registry.
    */
   export interface RegistryItem {
-    callback: (p1: Scope) => void;
+    /**
+     * @param scope Object that provides a reference to the thing that had its
+     *     context menu opened.
+     * @param e The original event that triggered the context menu to open. Not
+     *     the event that triggered the click on the option.
+     */
+    callback: (scope: Scope, e: PointerEvent) => void;
     scopeType: ScopeType;
-    displayText: ((p1: Scope) => string)|string;
+    displayText: ((p1: Scope) => string | HTMLElement) | string | HTMLElement;
     preconditionFn: (p1: Scope) => string;
     weight: number;
     id: string;
@@ -145,9 +155,15 @@ export namespace ContextMenuRegistry {
    * A menu item as presented to contextmenu.js.
    */
   export interface ContextMenuOption {
-    text: string;
+    text: string | HTMLElement;
     enabled: boolean;
-    callback: (p1: Scope) => void;
+    /**
+     * @param scope Object that provides a reference to the thing that had its
+     *     context menu opened.
+     * @param e The original event that triggered the context menu to open. Not
+     *     the event that triggered the click on the option.
+     */
+    callback: (scope: Scope, e: PointerEvent) => void;
     scope: Scope;
     weight: number;
   }
@@ -175,4 +191,4 @@ export type Scope = ContextMenuRegistry.Scope;
 export type RegistryItem = ContextMenuRegistry.RegistryItem;
 export type ContextMenuOption = ContextMenuRegistry.ContextMenuOption;
 export type LegacyContextMenuOption =
-    ContextMenuRegistry.LegacyContextMenuOption;
+  ContextMenuRegistry.LegacyContextMenuOption;

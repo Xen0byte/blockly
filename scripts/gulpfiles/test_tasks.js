@@ -15,7 +15,7 @@ const gzip = require('gulp-gzip');
 const fs = require('fs');
 const path = require('path');
 const {execSync} = require('child_process');
-const rimraf = require('rimraf');
+const {rimraf} = require('rimraf');
 
 const {RELEASE_DIR, TEST_TSC_OUTPUT_DIR} = require('./config');
 
@@ -59,7 +59,7 @@ function runTestTask(id, task) {
         successCount++;
         if (process.env.CI) console.log('::endgroup::');
         console.log(`${BOLD_GREEN}SUCCESS:${ANSI_RESET} ${id}`);
-        results[id] = {success: true}; 
+        results[id] = {success: true};
         resolve(result);
       })
       .catch((err) => {
@@ -153,7 +153,7 @@ function build() {
  * @return {Promise} Asynchronous result.
  */
 function renamings() {
-  return runTestCommand('renamings', 'node tests/migration/validate-renamings.js');
+  return runTestCommand('renamings', 'tests/migration/validate-renamings.mjs');
 }
 
 /**
@@ -191,8 +191,8 @@ function compareSize(file, expected) {
     const message = `Failed: Previous size of ${name} is undefined.`;
     console.log(`${BOLD_RED}${message}${ANSI_RESET}`);
     return 1;
-  } 
-  
+  }
+
   if (size > compare) {
     const message = `Failed: ` +
         `Size of ${name} has grown more than 10%. ${size} vs ${expected}`;

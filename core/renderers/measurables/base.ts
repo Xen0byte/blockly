@@ -4,18 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Methods for graphically rendering a block as SVG.
- *
- * @class
- */
-import * as goog from '../../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.blockRendering.Measurable');
+// Former goog.module ID: Blockly.blockRendering.Measurable
 
 import type {ConstantProvider} from '../common/constants.js';
-
 import {Types} from './types.js';
-
 
 /**
  * The base class to represent a part of a block that takes up space during
@@ -37,7 +29,6 @@ export class Measurable {
 
   /**
    * @param constants The rendering constants provider.
-   * @internal
    */
   constructor(constants: ConstantProvider) {
     this.constants_ = constants;

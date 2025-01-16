@@ -9,8 +9,7 @@
  *
  * @class
  */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.VariableMap');
+// Former goog.module ID: Blockly.VariableMap
 
 // Unused import preserved for side-effects. Remove if unneeded.
 import './events/events_var_delete.js';
@@ -19,6 +18,7 @@ import './events/events_var_rename.js';
 
 import type {Block} from './block.js';
 import * as dialog from './dialog.js';
+import {EventType} from './events/type.js';
 import * as eventUtils from './events/utils.js';
 import {Msg} from './msg.js';
 import {Names} from './names.js';
@@ -26,7 +26,6 @@ import * as arrayUtils from './utils/array.js';
 import * as idGenerator from './utils/idgenerator.js';
 import {VariableModel} from './variable_model.js';
 import type {Workspace} from './workspace.js';
-
 
 /**
  * Class for a variable map.  This contains a dictionary data structure with
@@ -69,18 +68,20 @@ export class VariableMap {
     const type = variable.type;
     const conflictVar = this.getVariable(newName, type);
     const blocks = this.workspace.getAllBlocks(false);
-    eventUtils.setGroup(true);
+    const existingGroup = eventUtils.getGroup();
+    if (!existingGroup) {
+      eventUtils.setGroup(true);
+    }
     try {
       // The IDs may match if the rename is a simple case change (name1 ->
       // Name1).
       if (!conflictVar || conflictVar.getId() === variable.getId()) {
-        this.renameVariableAndUses_(variable, newName, blocks);
+        this.renameVariableAndUses(variable, newName, blocks);
       } else {
-        this.renameVariableWithConflict_(
-            variable, newName, conflictVar, blocks);
+        this.renameVariableWithConflict(variable, newName, conflictVar, blocks);
       }
     } finally {
-      eventUtils.setGroup(false);
+      eventUtils.setGroup(existingGroup);
     }
   }
 
@@ -94,7 +95,7 @@ export class VariableMap {
   renameVariableById(id: string, newName: string) {
     const variable = this.getVariableById(id);
     if (!variable) {
-      throw Error('Tried to rename a variable that didn\'t exist. ID: ' + id);
+      throw Error("Tried to rename a variable that didn't exist. ID: " + id);
     }
 
     this.renameVariable(variable, newName);
@@ -108,10 +109,14 @@ export class VariableMap {
    * @param newName New variable name.
    * @param blocks The list of all blocks in the workspace.
    */
-  private renameVariableAndUses_(
-      variable: VariableModel, newName: string, blocks: Block[]) {
+  private renameVariableAndUses(
+    variable: VariableModel,
+    newName: string,
+    blocks: Block[],
+  ) {
     eventUtils.fire(
-        new (eventUtils.get(eventUtils.VAR_RENAME))(variable, newName));
+      new (eventUtils.get(EventType.VAR_RENAME))(variable, newName),
+    );
     variable.name = newName;
     for (let i = 0; i < blocks.length; i++) {
       blocks[i].updateVarName(variable);
@@ -129,15 +134,18 @@ export class VariableMap {
    * @param conflictVar The variable that was already using newName.
    * @param blocks The list of all blocks in the workspace.
    */
-  private renameVariableWithConflict_(
-      variable: VariableModel, newName: string, conflictVar: VariableModel,
-      blocks: Block[]) {
+  private renameVariableWithConflict(
+    variable: VariableModel,
+    newName: string,
+    conflictVar: VariableModel,
+    blocks: Block[],
+  ) {
     const type = variable.type;
     const oldCase = conflictVar.name;
 
     if (newName !== oldCase) {
       // Simple rename to change the case and update references.
-      this.renameVariableAndUses_(conflictVar, newName, blocks);
+      this.renameVariableAndUses(conflictVar, newName, blocks);
     }
 
     // These blocks now refer to a different variable.
@@ -146,7 +154,7 @@ export class VariableMap {
       blocks[i].renameVarById(variable.getId(), conflictVar.getId());
     }
     // Finally delete the original variable, which is now unreferenced.
-    eventUtils.fire(new (eventUtils.get(eventUtils.VAR_DELETE))(variable));
+    eventUtils.fire(new (eventUtils.get(EventType.VAR_DELETE))(variable));
     // And remove it from the list.
     arrayUtils.removeElem(this.variableMap.get(type)!, variable);
   }
@@ -163,15 +171,24 @@ export class VariableMap {
    * @param opt_id The unique ID of the variable. This will default to a UUID.
    * @returns The newly created variable.
    */
-  createVariable(name: string, opt_type?: string|null, opt_id?: string|null):
-      VariableModel {
+  createVariable(
+    name: string,
+    opt_type?: string | null,
+    opt_id?: string | null,
+  ): VariableModel {
     let variable = this.getVariable(name, opt_type);
     if (variable) {
       if (opt_id && variable.getId() !== opt_id) {
         throw Error(
-            'Variable "' + name + '" is already in use and its id is "' +
-            variable.getId() + '" which conflicts with the passed in ' +
-            'id, "' + opt_id + '".');
+          'Variable "' +
+            name +
+            '" is already in use and its id is "' +
+            variable.getId() +
+            '" which conflicts with the passed in ' +
+            'id, "' +
+            opt_id +
+            '".',
+        );
       }
       // The variable already exists and has the same ID.
       return variable;
@@ -192,7 +209,7 @@ export class VariableMap {
     this.variableMap.delete(type);
     this.variableMap.set(type, variables);
 
-    eventUtils.fire(new (eventUtils.get(eventUtils.VAR_CREATE))(variable));
+    eventUtils.fire(new (eventUtils.get(EventType.VAR_CREATE))(variable));
 
     return variable;
   }
@@ -211,8 +228,7 @@ export class VariableMap {
         const tempVar = variableList[i];
         if (tempVar.getId() === variableId) {
           variableList.splice(i, 1);
-          eventUtils.fire(
-              new (eventUtils.get(eventUtils.VAR_DELETE))(variable));
+          eventUtils.fire(new (eventUtils.get(EventType.VAR_DELETE))(variable));
           if (variableList.length === 0) {
             this.variableMap.delete(variable.type);
           }
@@ -234,13 +250,15 @@ export class VariableMap {
       // Check whether this variable is a function parameter before deleting.
       const variableName = variable.name;
       const uses = this.getVariableUsesById(id);
-      for (let i = 0, block; block = uses[i]; i++) {
-        if (block.type === 'procedures_defnoreturn' ||
-            block.type === 'procedures_defreturn') {
+      for (let i = 0, block; (block = uses[i]); i++) {
+        if (
+          block.type === 'procedures_defnoreturn' ||
+          block.type === 'procedures_defreturn'
+        ) {
           const procedureName = String(block.getFieldValue('NAME'));
           const deleteText = Msg['CANNOT_DELETE_VARIABLE_PROCEDURE']
-                                 .replace('%1', variableName)
-                                 .replace('%2', procedureName);
+            .replace('%1', variableName)
+            .replace('%2', procedureName);
           dialog.alert(deleteText);
           return;
         }
@@ -249,8 +267,8 @@ export class VariableMap {
       if (uses.length > 1) {
         // Confirm before deleting multiple blocks.
         const confirmText = Msg['DELETE_VARIABLE_CONFIRMATION']
-                                .replace('%1', String(uses.length))
-                                .replace('%2', variableName);
+          .replace('%1', String(uses.length))
+          .replace('%2', variableName);
         dialog.confirm(confirmText, (ok) => {
           if (ok && variable) {
             this.deleteVariableInternal(variable, uses);
@@ -261,7 +279,7 @@ export class VariableMap {
         this.deleteVariableInternal(variable, uses);
       }
     } else {
-      console.warn('Can\'t delete non-existent variable: ' + id);
+      console.warn("Can't delete non-existent variable: " + id);
     }
   }
 
@@ -284,9 +302,7 @@ export class VariableMap {
       }
       this.deleteVariable(variable);
     } finally {
-      if (!existingGroup) {
-        eventUtils.setGroup(false);
-      }
+      eventUtils.setGroup(existingGroup);
     }
   }
   /* End functions for variable deletion. */
@@ -299,11 +315,11 @@ export class VariableMap {
    *     the empty string, which is a specific type.
    * @returns The variable with the given name, or null if it was not found.
    */
-  getVariable(name: string, opt_type?: string|null): VariableModel|null {
+  getVariable(name: string, opt_type?: string | null): VariableModel | null {
     const type = opt_type || '';
     const list = this.variableMap.get(type);
     if (list) {
-      for (let j = 0, variable; variable = list[j]; j++) {
+      for (let j = 0, variable; (variable = list[j]); j++) {
         if (Names.equals(variable.name, name)) {
           return variable;
         }
@@ -318,7 +334,7 @@ export class VariableMap {
    * @param id The ID to check for.
    * @returns The variable with the given ID.
    */
-  getVariableById(id: string): VariableModel|null {
+  getVariableById(id: string): VariableModel | null {
     for (const variables of this.variableMap.values()) {
       for (const variable of variables) {
         if (variable.getId() === id) {
@@ -337,7 +353,7 @@ export class VariableMap {
    * @returns The sought after variables of the passed in type. An empty array
    *     if none are found.
    */
-  getVariablesOfType(type: string|null): VariableModel[] {
+  getVariablesOfType(type: string | null): VariableModel[] {
     type = type || '';
     const variableList = this.variableMap.get(type);
     if (variableList) {
@@ -356,7 +372,7 @@ export class VariableMap {
    * @returns List of variable types.
    * @internal
    */
-  getVariableTypes(ws: Workspace|null): string[] {
+  getVariableTypes(ws: Workspace | null): string[] {
     const variableTypes = new Set<string>(this.variableMap.keys());
     if (ws && ws.getPotentialVariableMap()) {
       for (const key of ws.getPotentialVariableMap()!.variableMap.keys()) {
@@ -389,8 +405,8 @@ export class VariableMap {
    */
   getAllVariableNames(): string[] {
     return Array.from(this.variableMap.values())
-        .flat()
-        .map((variable) => variable.name);
+      .flat()
+      .map((variable) => variable.name);
   }
 
   /**

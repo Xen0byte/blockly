@@ -9,17 +9,13 @@
  *
  * @class
  */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.Events.TrashcanOpen');
+// Former goog.module ID: Blockly.Events.TrashcanOpen
 
-import * as deprecation from '../utils/deprecation.js';
 import * as registry from '../registry.js';
-import {AbstractEventJson} from './events_abstract.js';
-
-import {UiBase} from './events_ui_base.js';
-import * as eventUtils from './utils.js';
 import type {Workspace} from '../workspace.js';
-
+import {AbstractEventJson} from './events_abstract.js';
+import {UiBase} from './events_ui_base.js';
+import {EventType} from './type.js';
 
 /**
  * Notifies listeners when the trashcan is opening or closing.
@@ -30,7 +26,7 @@ export class TrashcanOpen extends UiBase {
    * False if it is currently closing (previously open).
    */
   isOpen?: boolean;
-  override type = eventUtils.TRASHCAN_OPEN;
+  override type = EventType.TRASHCAN_OPEN;
 
   /**
    * @param opt_isOpen Whether the trashcan flyout is opening (false if
@@ -52,24 +48,12 @@ export class TrashcanOpen extends UiBase {
     const json = super.toJson() as TrashcanOpenJson;
     if (this.isOpen === undefined) {
       throw new Error(
-          'Whether this is already open or not is undefined. Either pass ' +
-          'a value to the constructor, or call fromJson');
+        'Whether this is already open or not is undefined. Either pass ' +
+          'a value to the constructor, or call fromJson',
+      );
     }
     json['isOpen'] = this.isOpen;
     return json;
-  }
-
-  /**
-   * Decode the JSON event.
-   *
-   * @param json JSON representation.
-   */
-  override fromJson(json: TrashcanOpenJson) {
-    deprecation.warn(
-        'Blockly.Events.TrashcanOpen.prototype.fromJson', 'version 9',
-        'version 10', 'Blockly.Events.fromJson');
-    super.fromJson(json);
-    this.isOpen = json['isOpen'];
   }
 
   /**
@@ -81,11 +65,16 @@ export class TrashcanOpen extends UiBase {
    *     parameters to static methods in superclasses.
    * @internal
    */
-  static fromJson(json: TrashcanOpenJson, workspace: Workspace, event?: any):
-      TrashcanOpen {
-    const newEvent =
-        super.fromJson(json, workspace, event ?? new TrashcanOpen()) as
-        TrashcanOpen;
+  static fromJson(
+    json: TrashcanOpenJson,
+    workspace: Workspace,
+    event?: any,
+  ): TrashcanOpen {
+    const newEvent = super.fromJson(
+      json,
+      workspace,
+      event ?? new TrashcanOpen(),
+    ) as TrashcanOpen;
     newEvent.isOpen = json['isOpen'];
     return newEvent;
   }
@@ -95,4 +84,4 @@ export interface TrashcanOpenJson extends AbstractEventJson {
   isOpen: boolean;
 }
 
-registry.register(registry.Type.EVENT, eventUtils.TRASHCAN_OPEN, TrashcanOpen);
+registry.register(registry.Type.EVENT, EventType.TRASHCAN_OPEN, TrashcanOpen);

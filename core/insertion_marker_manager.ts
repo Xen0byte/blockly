@@ -9,23 +9,22 @@
  *
  * @class
  */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.InsertionMarkerManager');
+// Former goog.module ID: Blockly.InsertionMarkerManager
 
 import * as blockAnimations from './block_animations.js';
 import type {BlockSvg} from './block_svg.js';
 import * as common from './common.js';
 import {ComponentManager} from './component_manager.js';
 import {config} from './config.js';
-import {ConnectionType} from './connection_type.js';
-import * as constants from './constants.js';
 import * as eventUtils from './events/utils.js';
 import type {IDeleteArea} from './interfaces/i_delete_area.js';
 import type {IDragTarget} from './interfaces/i_drag_target.js';
+import * as renderManagement from './render_management.js';
+import {finishQueuedRenders} from './render_management.js';
 import type {RenderedConnection} from './rendered_connection.js';
+import * as blocks from './serialization/blocks.js';
 import type {Coordinate} from './utils/coordinate.js';
 import type {WorkspaceSvg} from './workspace_svg.js';
-
 
 /** Represents a nearby valid connection. */
 interface CandidateConnection {
@@ -44,18 +43,11 @@ interface CandidateConnection {
 }
 
 /**
- * An error message to throw if the block created by createMarkerBlock_ is
- * missing any components.
- */
-const DUPLICATE_BLOCK_ERROR = 'The insertion marker ' +
-    'manager tried to create a marker but the result is missing %1. If ' +
-    'you are using a mutator, make sure your domToMutation method is ' +
-    'properly defined.';
-
-/**
  * Class that controls updates to connections during drags.  It is primarily
  * responsible for finding the closest eligible connection and highlighting or
  * unhighlighting it as needed during a drag.
+ *
+ * @deprecated v10 - Use an IConnectionPreviewer instead.
  */
 export class InsertionMarkerManager {
   /**
@@ -75,14 +67,14 @@ export class InsertionMarkerManager {
    * first block.
    * Set in initAvailableConnections, if at all.
    */
-  private lastOnStack: RenderedConnection|null = null;
+  private lastOnStack: RenderedConnection | null = null;
 
   /**
    * The insertion marker corresponding to the last block in the stack, if
    * that's not the same as the first block in the stack.
    * Set in initAvailableConnections, if at all
    */
-  private lastMarker: BlockSvg|null = null;
+  private lastMarker: BlockSvg | null = null;
 
   /**
    * The insertion marker that shows up between blocks to show where a block
@@ -94,7 +86,7 @@ export class InsertionMarkerManager {
    * Information about the connection that would be made if the dragging block
    * were released immediately. Updated on every mouse move.
    */
-  private activeCandidate: CandidateConnection|null = null;
+  private activeCandidate: CandidateConnection | null = null;
 
   /**
    * Whether the block would be deleted if it were dropped immediately.
@@ -108,13 +100,13 @@ export class InsertionMarkerManager {
    * Connection on the insertion marker block that corresponds to
    * the active candidate's local connection on the currently dragged block.
    */
-  private markerConnection: RenderedConnection|null = null;
+  private markerConnection: RenderedConnection | null = null;
 
   /** The block that currently has an input being highlighted, or null. */
-  private highlightedBlock: BlockSvg|null = null;
+  private highlightedBlock: BlockSvg | null = null;
 
   /** The block being faded to indicate replacement, or null. */
-  private fadedBlock: BlockSvg|null = null;
+  private fadedBlock: BlockSvg | null = null;
 
   /**
    * The connections on the dragging blocks that are available to connect to
@@ -133,6 +125,12 @@ export class InsertionMarkerManager {
     this.firstMarker = this.createMarkerBlock(this.topBlock);
 
     this.availableConnections = this.initAvailableConnections();
+
+    if (this.lastOnStack) {
+      this.lastMarker = this.createMarkerBlock(
+        this.lastOnStack.getSourceBlock(),
+      );
+    }
   }
 
   /**
@@ -142,18 +140,8 @@ export class InsertionMarkerManager {
    */
   dispose() {
     this.availableConnections.length = 0;
-
-    eventUtils.disable();
-    try {
-      if (this.firstMarker) {
-        this.firstMarker.dispose();
-      }
-      if (this.lastMarker) {
-        this.lastMarker.dispose();
-      }
-    } finally {
-      eventUtils.enable();
-    }
+    this.disposeInsertionMarker(this.firstMarker);
+    this.disposeInsertionMarker(this.lastMarker);
   }
 
   /**
@@ -185,22 +173,21 @@ export class InsertionMarkerManager {
    */
   applyConnections() {
     if (!this.activeCandidate) return;
-    // Don't fire events for insertion markers.
     eventUtils.disable();
     this.hidePreview();
     eventUtils.enable();
     const {local, closest} = this.activeCandidate;
-    // Connect two blocks together.
     local.connect(closest);
-    if (this.topBlock.rendered) {
-      // Trigger a connection animation.
-      // Determine which connection is inferior (lower in the source stack).
-      const inferiorConnection = local.isSuperior() ? closest : local;
+    const inferiorConnection = local.isSuperior() ? closest : local;
+    const rootBlock = this.topBlock.getRootBlock();
+
+    finishQueuedRenders().then(() => {
       blockAnimations.connectionUiEffect(inferiorConnection.getSourceBlock());
-      // Bring the just-edited stack to the front.
-      const rootBlock = this.topBlock.getRootBlock();
-      rootBlock.bringToFront();
-    }
+      // bringToFront is incredibly expensive. Delay until the next frame.
+      setTimeout(() => {
+        rootBlock.bringToFront();
+      }, 0);
+    });
   }
 
   /**
@@ -210,13 +197,13 @@ export class InsertionMarkerManager {
    * @param dragTarget The drag target that the block is currently over.
    * @internal
    */
-  update(dxy: Coordinate, dragTarget: IDragTarget|null) {
+  update(dxy: Coordinate, dragTarget: IDragTarget | null) {
     const newCandidate = this.getCandidate(dxy);
 
     this.wouldDeleteBlock = this.shouldDelete(!!newCandidate, dragTarget);
 
     const shouldUpdate =
-        this.wouldDeleteBlock || this.shouldUpdatePreviews(newCandidate, dxy);
+      this.wouldDeleteBlock || this.shouldUpdatePreviews(newCandidate, dxy);
 
     if (shouldUpdate) {
       // Don't fire events for insertion marker creation or movement.
@@ -234,48 +221,29 @@ export class InsertionMarkerManager {
    * @returns The insertion marker that represents the given block.
    */
   private createMarkerBlock(sourceBlock: BlockSvg): BlockSvg {
-    const imType = sourceBlock.type;
-
     eventUtils.disable();
     let result: BlockSvg;
     try {
-      result = this.workspace.newBlock(imType);
-      result.setInsertionMarker(true);
-      if (sourceBlock.saveExtraState) {
-        const state = sourceBlock.saveExtraState();
-        if (state && result.loadExtraState) {
-          result.loadExtraState(state);
-        }
-      } else if (sourceBlock.mutationToDom) {
-        const oldMutationDom = sourceBlock.mutationToDom();
-        if (oldMutationDom && result.domToMutation) {
-          result.domToMutation(oldMutationDom);
-        }
-      }
-      // Copy field values from the other block.  These values may impact the
-      // rendered size of the insertion marker.  Note that we do not care about
-      // child blocks here.
-      for (let i = 0; i < sourceBlock.inputList.length; i++) {
-        const sourceInput = sourceBlock.inputList[i];
-        if (sourceInput.name === constants.COLLAPSED_INPUT_NAME) {
-          continue;  // Ignore the collapsed input.
-        }
-        const resultInput = result.inputList[i];
-        if (!resultInput) {
-          throw new Error(DUPLICATE_BLOCK_ERROR.replace('%1', 'an input'));
-        }
-        for (let j = 0; j < sourceInput.fieldRow.length; j++) {
-          const sourceField = sourceInput.fieldRow[j];
-          const resultField = resultInput.fieldRow[j];
-          if (!resultField) {
-            throw new Error(DUPLICATE_BLOCK_ERROR.replace('%1', 'a field'));
-          }
-          resultField.setValue(sourceField.getValue());
-        }
+      const blockJson = blocks.save(sourceBlock, {
+        addCoordinates: false,
+        addInputBlocks: false,
+        addNextBlocks: false,
+        doFullSerialization: false,
+      });
+
+      if (!blockJson) {
+        throw new Error(
+          `Failed to serialize source block. ${sourceBlock.toDevString()}`,
+        );
       }
 
-      result.setCollapsed(sourceBlock.isCollapsed());
-      result.setInputsInline(sourceBlock.getInputsInline());
+      result = blocks.append(blockJson, this.workspace) as BlockSvg;
+
+      // Turn shadow blocks that are created programmatically during
+      // initalization to insertion markers too.
+      for (const block of result.getDescendants(false)) {
+        block.setInsertionMarker(true);
+      }
 
       result.initSvg();
       result.getSvgRoot().setAttribute('visibility', 'hidden');
@@ -287,10 +255,8 @@ export class InsertionMarkerManager {
   }
 
   /**
-   * Populate the list of available connections on this block stack.  This
-   * should only be called once, at the beginning of a drag. If the stack has
-   * more than one block, this function will populate lastOnStack and create
-   * the corresponding insertion marker.
+   * Populate the list of available connections on this block stack. If the
+   * stack has more than one block, this function will also update lastOnStack.
    *
    * @returns A list of available connections.
    */
@@ -301,15 +267,6 @@ export class InsertionMarkerManager {
     if (lastOnStack && lastOnStack !== this.topBlock.nextConnection) {
       available.push(lastOnStack);
       this.lastOnStack = lastOnStack;
-      if (this.lastMarker) {
-        eventUtils.disable();
-        try {
-          this.lastMarker.dispose();
-        } finally {
-          eventUtils.enable();
-        }
-      }
-      this.lastMarker = this.createMarkerBlock(lastOnStack.getSourceBlock());
     }
     return available;
   }
@@ -324,7 +281,9 @@ export class InsertionMarkerManager {
    * @returns Whether the preview should be updated.
    */
   private shouldUpdatePreviews(
-      newCandidate: CandidateConnection|null, dxy: Coordinate): boolean {
+    newCandidate: CandidateConnection | null,
+    dxy: Coordinate,
+  ): boolean {
     // Only need to update if we were showing a preview before.
     if (!newCandidate) return !!this.activeCandidate;
 
@@ -334,8 +293,10 @@ export class InsertionMarkerManager {
     // We're already showing an insertion marker.
     // Decide whether the new connection has higher priority.
     const {local: activeLocal, closest: activeClosest} = this.activeCandidate;
-    if (activeClosest === newCandidate.closest &&
-        activeLocal === newCandidate.local) {
+    if (
+      activeClosest === newCandidate.closest &&
+      activeLocal === newCandidate.local
+    ) {
       // The connection was the same as the current connection.
       return false;
     }
@@ -345,7 +306,8 @@ export class InsertionMarkerManager {
     const curDistance = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
     // Slightly prefer the existing preview over a new preview.
     return (
-        newCandidate.radius < curDistance - config.currentConnectionPreference);
+      newCandidate.radius < curDistance - config.currentConnectionPreference
+    );
   }
 
   /**
@@ -356,7 +318,7 @@ export class InsertionMarkerManager {
    * @returns An object containing a local connection, a closest connection, and
    *     a radius.
    */
-  private getCandidate(dxy: Coordinate): CandidateConnection|null {
+  private getCandidate(dxy: Coordinate): CandidateConnection | null {
     // It's possible that a block has added or removed connections during a
     // drag, (e.g. in a drag/move event handler), so let's update the available
     // connections. Note that this will be called on every move while dragging,
@@ -398,8 +360,9 @@ export class InsertionMarkerManager {
     // insertion marker is created, which could cause the connection became out
     // of range. By increasing radiusConnection when a connection already
     // exists, we never "lose" the connection from the offset.
-    return this.activeCandidate ? config.connectingSnapRadius :
-                                  config.snapRadius;
+    return this.activeCandidate
+      ? config.connectingSnapRadius
+      : config.snapRadius;
   }
 
   /**
@@ -410,15 +373,18 @@ export class InsertionMarkerManager {
    * @param dragTarget The drag target that the block is currently over.
    * @returns Whether dropping the block immediately would delete the block.
    */
-  private shouldDelete(newCandidate: boolean, dragTarget: IDragTarget|null):
-      boolean {
+  private shouldDelete(
+    newCandidate: boolean,
+    dragTarget: IDragTarget | null,
+  ): boolean {
     if (dragTarget) {
       const componentManager = this.workspace.getComponentManager();
       const isDeleteArea = componentManager.hasCapability(
-          dragTarget.id, ComponentManager.Capability.DELETE_AREA);
+        dragTarget.id,
+        ComponentManager.Capability.DELETE_AREA,
+      );
       if (isDeleteArea) {
-        return (dragTarget as IDeleteArea)
-            .wouldDelete(this.topBlock, newCandidate);
+        return (dragTarget as IDeleteArea).wouldDelete(this.topBlock);
       }
     }
     return false;
@@ -432,16 +398,18 @@ export class InsertionMarkerManager {
    * @param newCandidate A new candidate connection that may replace the current
    *     best candidate.
    */
-  private maybeShowPreview(newCandidate: CandidateConnection|null) {
-    if (this.wouldDeleteBlock) return;  // Nope, don't add a marker.
-    if (!newCandidate) return;          // Nothing to connect to.
+  private maybeShowPreview(newCandidate: CandidateConnection | null) {
+    if (this.wouldDeleteBlock) return; // Nope, don't add a marker.
+    if (!newCandidate) return; // Nothing to connect to.
 
     const closest = newCandidate.closest;
 
     // Something went wrong and we're trying to connect to an invalid
     // connection.
-    if (closest === this.activeCandidate?.closest ||
-        closest.getSourceBlock().isInsertionMarker()) {
+    if (
+      closest === this.activeCandidate?.closest ||
+      closest.getSourceBlock().isInsertionMarker()
+    ) {
       console.log('Trying to connect to an insertion marker');
       return;
     }
@@ -460,7 +428,10 @@ export class InsertionMarkerManager {
   private showPreview(activeCandidate: CandidateConnection) {
     const renderer = this.workspace.getRenderer();
     const method = renderer.getConnectionPreviewMethod(
-        activeCandidate.closest, activeCandidate.local, this.topBlock);
+      activeCandidate.closest,
+      activeCandidate.local,
+      this.topBlock,
+    );
 
     switch (method) {
       case InsertionMarkerManager.PREVIEW_TYPE.INPUT_OUTLINE:
@@ -489,7 +460,7 @@ export class InsertionMarkerManager {
    * @param newCandidate A new candidate connection that may replace the current
    *     best candidate.
    */
-  private maybeHidePreview(newCandidate: CandidateConnection|null) {
+  private maybeHidePreview(newCandidate: CandidateConnection | null) {
     // If there's no new preview, remove the old one but don't bother deleting
     // it. We might need it later, and this saves disposing of it and recreating
     // it.
@@ -498,14 +469,14 @@ export class InsertionMarkerManager {
     } else {
       if (this.activeCandidate) {
         const closestChanged =
-            this.activeCandidate.closest !== newCandidate.closest;
+          this.activeCandidate.closest !== newCandidate.closest;
         const localChanged = this.activeCandidate.local !== newCandidate.local;
 
         // If there's a new preview and there was a preview before, and either
         // connection has changed, remove the old preview.
         // Also hide if we had a preview before but now we're going to delete
         // instead.
-        if ((closestChanged || localChanged || this.wouldDeleteBlock)) {
+        if (closestChanged || localChanged || this.wouldDeleteBlock) {
           this.hidePreview();
         }
       }
@@ -522,8 +493,11 @@ export class InsertionMarkerManager {
    */
   private hidePreview() {
     const closest = this.activeCandidate?.closest;
-    if (closest && closest.targetBlock() &&
-        this.workspace.getRenderer().shouldHighlightConnection(closest)) {
+    if (
+      closest &&
+      closest.targetBlock() &&
+      this.workspace.getRenderer().shouldHighlightConnection(closest)
+    ) {
       closest.unhighlight();
     }
     this.hideReplacementFade();
@@ -545,57 +519,84 @@ export class InsertionMarkerManager {
     let insertionMarker = isLastInStack ? this.lastMarker : this.firstMarker;
     if (!insertionMarker) {
       throw new Error(
-          'Cannot show the insertion marker because there is no insertion ' +
-          'marker block');
+        'Cannot show the insertion marker because there is no insertion ' +
+          'marker block',
+      );
     }
     let imConn;
     try {
-      imConn =
-          insertionMarker.getMatchingConnection(local.getSourceBlock(), local);
-    } catch (e) {
+      imConn = insertionMarker.getMatchingConnection(
+        local.getSourceBlock(),
+        local,
+      );
+    } catch {
       // It's possible that the number of connections on the local block has
       // changed since the insertion marker was originally created.  Let's
       // recreate the insertion marker and try again. In theory we could
       // probably recreate the marker block (e.g. in getCandidate_), which is
       // called more often during the drag, but creating a block that often
       // might be too slow, so we only do it if necessary.
-      this.firstMarker = this.createMarkerBlock(this.topBlock);
-      insertionMarker = isLastInStack ? this.lastMarker : this.firstMarker;
+      if (isLastInStack && this.lastOnStack) {
+        this.disposeInsertionMarker(this.lastMarker);
+        this.lastMarker = this.createMarkerBlock(
+          this.lastOnStack.getSourceBlock(),
+        );
+        insertionMarker = this.lastMarker;
+      } else {
+        this.disposeInsertionMarker(this.firstMarker);
+        this.firstMarker = this.createMarkerBlock(this.topBlock);
+        insertionMarker = this.firstMarker;
+      }
+
       if (!insertionMarker) {
         throw new Error(
-            'Cannot show the insertion marker because there is no insertion ' +
-            'marker block');
+          'Cannot show the insertion marker because there is no insertion ' +
+            'marker block',
+        );
       }
-      imConn =
-          insertionMarker.getMatchingConnection(local.getSourceBlock(), local);
+      imConn = insertionMarker.getMatchingConnection(
+        local.getSourceBlock(),
+        local,
+      );
     }
 
     if (!imConn) {
       throw new Error(
-          'Cannot show the insertion marker because there is no ' +
-          'associated connection');
+        'Cannot show the insertion marker because there is no ' +
+          'associated connection',
+      );
     }
 
     if (imConn === this.markerConnection) {
       throw new Error(
-          'Made it to showInsertionMarker_ even though the marker isn\'t ' +
-          'changing');
+        "Made it to showInsertionMarker_ even though the marker isn't " +
+          'changing',
+      );
     }
 
     // Render disconnected from everything else so that we have a valid
     // connection location.
-    insertionMarker.render();
-    insertionMarker.rendered = true;
-    insertionMarker.getSvgRoot().setAttribute('visibility', 'visible');
+    insertionMarker.queueRender();
+    renderManagement.triggerQueuedRenders();
 
-    if (imConn && closest) {
+    // Connect() also renders the insertion marker.
+    imConn.connect(closest);
+
+    const originalOffsetToTarget = {
+      x: closest.x - imConn.x,
+      y: closest.y - imConn.y,
+    };
+    const originalOffsetInBlock = imConn.getOffsetInBlock().clone();
+    const imConnConst = imConn;
+    renderManagement.finishQueuedRenders().then(() => {
       // Position so that the existing block doesn't move.
-      insertionMarker.positionNearConnection(imConn, closest);
-    }
-    if (closest) {
-      // Connect() also renders the insertion marker.
-      imConn.connect(closest);
-    }
+      insertionMarker?.positionNearConnection(
+        imConnConst,
+        originalOffsetToTarget,
+        originalOffsetInBlock,
+      );
+      insertionMarker?.getSvgRoot().setAttribute('visibility', 'visible');
+    });
 
     this.markerConnection = imConn;
   }
@@ -609,44 +610,23 @@ export class InsertionMarkerManager {
 
     const markerConn = this.markerConnection;
     const imBlock = markerConn.getSourceBlock();
-    const markerNext = imBlock.nextConnection;
     const markerPrev = imBlock.previousConnection;
     const markerOutput = imBlock.outputConnection;
 
-    const isNext = markerConn === markerNext;
-
-    const isFirstInStatementStack =
-        isNext && !(markerPrev && markerPrev.targetConnection);
-
-    const isFirstInOutputStack =
-        markerConn.type === ConnectionType.INPUT_VALUE &&
-        !(markerOutput && markerOutput.targetConnection);
-    // The insertion marker is the first block in a stack.  Unplug won't do
-    // anything in that case.  Instead, unplug the following block.
-    if (isFirstInStatementStack || isFirstInOutputStack) {
-      markerConn.targetBlock()!.unplug(false);
-    } else if (markerConn.type === ConnectionType.NEXT_STATEMENT && !isNext) {
-      // Inside of a C-block, first statement connection.
-      const innerConnection = markerConn.targetConnection;
-      if (innerConnection) {
-        innerConnection.getSourceBlock().unplug(false);
-      }
-
-      const previousBlockNextConnection =
-          markerPrev ? markerPrev.targetConnection : null;
-
-      imBlock.unplug(true);
-      if (previousBlockNextConnection && innerConnection) {
-        previousBlockNextConnection.connect(innerConnection);
-      }
+    if (!markerPrev?.targetConnection && !markerOutput?.targetConnection) {
+      // If we are the top block, unplugging doesn't do anything.
+      // The marker connection may not have a target block if we are hiding
+      // as part of applying connections.
+      markerConn.targetBlock()?.unplug(false);
     } else {
-      imBlock.unplug(/* healStack */ true);
+      imBlock.unplug(true);
     }
 
     if (markerConn.targetConnection) {
       throw Error(
-          'markerConnection still connected at the end of ' +
-          'disconnectInsertionMarker');
+        'markerConnection still connected at the end of ' +
+          'disconnectInsertionMarker',
+      );
     }
 
     this.markerConnection = null;
@@ -674,11 +654,14 @@ export class InsertionMarkerManager {
 
     if (!this.activeCandidate) {
       throw new Error(
-          'Cannot hide the insertion marker outline because ' +
-          'there is no active candidate');
+        'Cannot hide the insertion marker outline because ' +
+          'there is no active candidate',
+      );
     }
     this.highlightedBlock.highlightShapeForInput(
-        this.activeCandidate.closest, false);
+      this.activeCandidate.closest,
+      false,
+    );
     this.highlightedBlock = null;
   }
 
@@ -693,8 +676,9 @@ export class InsertionMarkerManager {
     this.fadedBlock = activeCandidate.closest.targetBlock();
     if (!this.fadedBlock) {
       throw new Error(
-          'Cannot show the replacement fade because the ' +
-          'closest connection does not have a target block');
+        'Cannot show the replacement fade because the ' +
+          'closest connection does not have a target block',
+      );
     }
     this.fadedBlock.fadeForReplacement(true);
   }
@@ -725,6 +709,20 @@ export class InsertionMarkerManager {
       result.push(this.lastMarker);
     }
     return result;
+  }
+
+  /**
+   * Safely disposes of an insertion marker.
+   */
+  private disposeInsertionMarker(marker: BlockSvg | null) {
+    if (marker) {
+      eventUtils.disable();
+      try {
+        marker.dispose();
+      } finally {
+        eventUtils.enable();
+      }
+    }
   }
 }
 

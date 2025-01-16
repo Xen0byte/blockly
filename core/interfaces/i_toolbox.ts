@@ -4,20 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * The interface for a toolbox.
- *
- * @namespace Blockly.IToolbox
- */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.IToolbox');
+// Former goog.module ID: Blockly.IToolbox
 
+import type {ToolboxInfo} from '../utils/toolbox.js';
+import type {WorkspaceSvg} from '../workspace_svg.js';
+import type {IFlyout} from './i_flyout.js';
 import type {IRegistrable} from './i_registrable.js';
 import type {IToolboxItem} from './i_toolbox_item.js';
-import type {ToolboxInfo} from '../utils/toolbox.js';
-import type {IFlyout} from './i_flyout.js';
-import type {WorkspaceSvg} from '../workspace_svg.js';
-
 
 /**
  * Interface for a toolbox.
@@ -52,7 +45,7 @@ export interface IToolbox extends IRegistrable {
    *
    * @returns The toolbox flyout.
    */
-  getFlyout(): IFlyout|null;
+  getFlyout(): IFlyout | null;
 
   /**
    * Gets the workspace for the toolbox.
@@ -112,7 +105,7 @@ export interface IToolbox extends IRegistrable {
    *
    * @returns The selected item, or null if no item is currently selected.
    */
-  getSelectedItem(): IToolboxItem|null;
+  getSelectedItem(): IToolboxItem | null;
 
   /** Disposes of this toolbox. */
   dispose(): void;

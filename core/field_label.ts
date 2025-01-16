@@ -10,21 +10,19 @@
  *
  * @class
  */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.FieldLabel');
+// Former goog.module ID: Blockly.FieldLabel
 
-import * as dom from './utils/dom.js';
 import {Field, FieldConfig} from './field.js';
 import * as fieldRegistry from './field_registry.js';
+import * as dom from './utils/dom.js';
 import * as parsing from './utils/parsing.js';
-import type {Sentinel} from './utils/sentinel.js';
 
 /**
  * Class for a non-editable, non-serializable text field.
  */
 export class FieldLabel extends Field<string> {
-  /** The html class name to use for this field. */
-  private class_: string|null = null;
+  /** The HTML class name to use for this field. */
+  private class: string | null = null;
 
   /**
    * Editable fields usually show some sort of UI indicating they are
@@ -32,61 +30,65 @@ export class FieldLabel extends Field<string> {
    */
   override EDITABLE = false;
 
+  /** Text labels should not truncate. */
+  override maxDisplayLength = Infinity;
+
   /**
-   * @param opt_value The initial value of the field. Should cast to a string.
+   * @param value The initial value of the field. Should cast to a string.
    *     Defaults to an empty string if null or undefined. Also accepts
    *     Field.SKIP_SETUP if you wish to skip setup (only used by subclasses
    *     that want to handle configuration and setting the field value after
    *     their own constructors have run).
-   * @param opt_class Optional CSS class for the field's text.
-   * @param opt_config A map of options used to configure the field.
+   * @param textClass Optional CSS class for the field's text.
+   * @param config A map of options used to configure the field.
    *    See the [field creation documentation]{@link
    * https://developers.google.com/blockly/guides/create-custom-blocks/fields/built-in-fields/label#creation}
    * for a list of properties this parameter supports.
    */
   constructor(
-      opt_value?: string|Sentinel, opt_class?: string,
-      opt_config?: FieldLabelConfig) {
+    value?: string | typeof Field.SKIP_SETUP,
+    textClass?: string,
+    config?: FieldLabelConfig,
+  ) {
     super(Field.SKIP_SETUP);
 
-    if (Field.isSentinel(opt_value)) return;
-    if (opt_config) {
-      this.configure_(opt_config);
+    if (value === Field.SKIP_SETUP) return;
+    if (config) {
+      this.configure_(config);
     } else {
-      this.class_ = opt_class || null;
+      this.class = textClass || null;
     }
-    this.setValue(opt_value);
+    this.setValue(value);
   }
 
   protected override configure_(config: FieldLabelConfig) {
     super.configure_(config);
-    if (config.class) this.class_ = config.class;
+    if (config.class) this.class = config.class;
   }
 
   /**
    * Create block UI for this label.
-   *
-   * @internal
    */
   override initView() {
     this.createTextElement_();
-    if (this.class_) {
-      dom.addClass(this.getTextElement(), this.class_);
+    if (this.class) {
+      dom.addClass(this.getTextElement(), this.class);
     }
   }
 
   /**
    * Ensure that the input value casts to a valid string.
    *
-   * @param opt_newValue The input value.
+   * @param newValue The input value.
    * @returns A valid string, or null if invalid.
    */
-  protected override doClassValidation_(opt_newValue?: AnyDuringMigration):
-      string|null {
-    if (opt_newValue === null || opt_newValue === undefined) {
+  protected override doClassValidation_(
+    newValue?: AnyDuringMigration,
+  ): string | null {
+    if (newValue === null || newValue === undefined) {
       return null;
     }
-    return String(opt_newValue);
+    return `${newValue}`;
   }
 
   /**
@@ -94,16 +96,16 @@ export class FieldLabel extends Field<string> {
    *
    * @param cssClass The new CSS class name, or null to remove.
    */
-  setClass(cssClass: string|null) {
+  setClass(cssClass: string | null) {
     if (this.textElement_) {
-      if (this.class_) {
-        dom.removeClass(this.textElement_, this.class_);
+      if (this.class) {
+        dom.removeClass(this.textElement_, this.class);
       }
       if (cssClass) {
         dom.addClass(this.textElement_, cssClass);
       }
     }
-    this.class_ = cssClass;
+    this.class = cssClass;
   }
 
   /**
@@ -115,7 +117,7 @@ export class FieldLabel extends Field<string> {
    * @nocollapse
    * @internal
    */
-  static fromJson(options: FieldLabelFromJsonConfig): FieldLabel {
+  static override fromJson(options: FieldLabelFromJsonConfig): FieldLabel {
     const text = parsing.replaceMessageReferences(options.text);
     // `this` might be a subclass of FieldLabel if that class doesn't override
     // the static fromJson method.
@@ -136,7 +138,6 @@ export interface FieldLabelConfig extends FieldConfig {
   class?: string;
 }
 // clang-format on
-
 
 /**
  * fromJson config options for the label field.

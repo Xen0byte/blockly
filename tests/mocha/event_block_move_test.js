@@ -4,25 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-goog.declareModuleId('Blockly.test.eventBlockMove');
-
+import {assert} from '../../node_modules/chai/chai.js';
 import {defineRowBlock} from './test_helpers/block_definitions.js';
-import {sharedTestSetup, sharedTestTeardown} from './test_helpers/setup_teardown.js';
+import {
+  sharedTestSetup,
+  sharedTestTeardown,
+} from './test_helpers/setup_teardown.js';
 
-
-suite('Block Move Event', function() {
-  setup(function() {
+suite('Block Move Event', function () {
+  setup(function () {
     sharedTestSetup.call(this);
     defineRowBlock();
     this.workspace = new Blockly.Workspace();
   });
 
-  teardown(function() {
+  teardown(function () {
     sharedTestTeardown.call(this);
   });
 
-  suite('Serialization', function() {
-    test('events round-trip through JSON', function() {
+  suite('Serialization', function () {
+    test('events round-trip through JSON', function () {
       const block1 = this.workspace.newBlock('row_block', 'block_id');
       const block2 = this.workspace.newBlock('row_block', 'block_id');
       const origEvent = new Blockly.Events.BlockMove(block1);
@@ -32,7 +33,7 @@ suite('Block Move Event', function() {
       const json = origEvent.toJson();
       const newEvent = new Blockly.Events.fromJson(json, this.workspace);
 
-      chai.assert.deepEqual(newEvent, origEvent);
+      assert.deepEqual(newEvent, origEvent);
     });
   });
 });

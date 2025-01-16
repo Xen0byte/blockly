@@ -9,27 +9,27 @@
  *
  * @class
  */
-import * as goog from '../../closure/goog/goog.js';
-goog.declareModuleId('Blockly.Events.BlockChange');
+// Former goog.module ID: Blockly.Events.BlockChange
 
 import type {Block} from '../block.js';
 import type {BlockSvg} from '../block_svg.js';
-import * as deprecation from '../utils/deprecation.js';
+import {MANUALLY_DISABLED} from '../constants.js';
+import {IconType} from '../icons/icon_types.js';
+import {hasBubble} from '../interfaces/i_has_bubble.js';
 import * as registry from '../registry.js';
 import * as utilsXml from '../utils/xml.js';
 import {Workspace} from '../workspace.js';
 import * as Xml from '../xml.js';
-
 import {BlockBase, BlockBaseJson} from './events_block_base.js';
+import {EventType} from './type.js';
 import * as eventUtils from './utils.js';
-
 
 /**
  * Notifies listeners when some element of a block has changed (e.g.
  * field values, comments, etc).
  */
 export class BlockChange extends BlockBase {
-  override type = eventUtils.BLOCK_CHANGE;
+  override type = EventType.BLOCK_CHANGE;
   /**
    * The element that changed; one of 'field', 'comment', 'collapsed',
    * 'disabled', 'inline', or 'mutation'
@@ -46,6 +46,12 @@ export class BlockChange extends BlockBase {
   newValue: unknown;
 
   /**
+   * If element is 'disabled', this is the language-neutral identifier of the
+   * reason why the block was or was not disabled.
+   */
+  private disabledReason?: string;
+
+  /**
    * @param opt_block The changed block.  Undefined for a blank event.
    * @param opt_element One of 'field', 'comment', 'disabled', etc.
    * @param opt_name Name of input or field affected, or null.
@@ -53,12 +59,16 @@ export class BlockChange extends BlockBase {
    * @param opt_newValue New value of element.
    */
   constructor(
-      opt_block?: Block, opt_element?: string, opt_name?: string|null,
-      opt_oldValue?: unknown, opt_newValue?: unknown) {
+    opt_block?: Block,
+    opt_element?: string,
+    opt_name?: string | null,
+    opt_oldValue?: unknown,
+    opt_newValue?: unknown,
+  ) {
     super(opt_block);
 
     if (!opt_block) {
-      return;  // Blank event to be populated by fromJson.
+      return; // Blank event to be populated by fromJson.
     }
     this.element = opt_element;
     this.name = opt_name || undefined;
@@ -75,30 +85,18 @@ export class BlockChange extends BlockBase {
     const json = super.toJson() as BlockChangeJson;
     if (!this.element) {
       throw new Error(
-          'The changed element is undefined. Either pass an ' +
-          'element to the constructor, or call fromJson');
+        'The changed element is undefined. Either pass an ' +
+          'element to the constructor, or call fromJson',
+      );
     }
     json['element'] = this.element;
     json['name'] = this.name;
     json['oldValue'] = this.oldValue;
     json['newValue'] = this.newValue;
+    if (this.disabledReason) {
+      json['disabledReason'] = this.disabledReason;
+    }
     return json;
-  }
-
-  /**
-   * Decode the JSON event.
-   *
-   * @param json JSON representation.
-   */
-  override fromJson(json: BlockChangeJson) {
-    deprecation.warn(
-        'Blockly.Events.BlockChange.prototype.fromJson', 'version 9',
-        'version 10', 'Blockly.Events.fromJson');
-    super.fromJson(json);
-    this.element = json['element'];
-    this.name = json['name'];
-    this.oldValue = json['oldValue'];
-    this.newValue = json['newValue'];
   }
 
   /**
@@ -110,16 +108,42 @@ export class BlockChange extends BlockBase {
    *     parameters to static methods in superclasses.
    * @internal
    */
-  static fromJson(json: BlockChangeJson, workspace: Workspace, event?: any):
-      BlockChange {
-    const newEvent =
-        super.fromJson(json, workspace, event ?? new BlockChange()) as
-        BlockChange;
+  static fromJson(
+    json: BlockChangeJson,
+    workspace: Workspace,
+    event?: any,
+  ): BlockChange {
+    const newEvent = super.fromJson(
+      json,
+      workspace,
+      event ?? new BlockChange(),
+    ) as BlockChange;
     newEvent.element = json['element'];
     newEvent.name = json['name'];
     newEvent.oldValue = json['oldValue'];
     newEvent.newValue = json['newValue'];
+    if (json['disabledReason'] !== undefined) {
+      newEvent.disabledReason = json['disabledReason'];
+    }
     return newEvent;
+  }
+
+  /**
+   * Set the language-neutral identifier for the reason why the block was or was
+   * not disabled. This is only valid for events where element is 'disabled'.
+   * Defaults to 'MANUALLY_DISABLED'.
+   *
+   * @param disabledReason The identifier of the reason why the block was or was
+   *     not disabled.
+   */
+  setDisabledReason(disabledReason: string) {
+    if (this.element !== 'disabled') {
+      throw new Error(
+        'Cannot set the disabled reason for a BlockChange event if the ' +
+          'element is not "disabled".',
+      );
+    }
+    this.disabledReason = disabledReason;
   }
 
   /**
@@ -140,20 +164,22 @@ export class BlockChange extends BlockBase {
     const workspace = this.getEventWorkspace_();
     if (!this.blockId) {
       throw new Error(
-          'The block ID is undefined. Either pass a block to ' +
-          'the constructor, or call fromJson');
+        'The block ID is undefined. Either pass a block to ' +
+          'the constructor, or call fromJson',
+      );
     }
     const block = workspace.getBlockById(this.blockId);
     if (!block) {
       throw new Error(
-          'The associated block is undefined. Either pass a ' +
-          'block to the constructor, or call fromJson');
+        'The associated block is undefined. Either pass a ' +
+          'block to the constructor, or call fromJson',
+      );
     }
     // Assume the block is rendered so that then we can check.
-    const blockSvg = block as BlockSvg;
-    if (blockSvg.mutator) {
+    const icon = block.getIcon(IconType.MUTATOR);
+    if (icon && hasBubble(icon) && icon.bubbleIsVisible()) {
       // Close the mutator (if open) since we don't want to update it.
-      blockSvg.mutator.setVisible(false);
+      icon.setBubbleVisible(false);
     }
     const value = forward ? this.newValue : this.oldValue;
     switch (this.element) {
@@ -162,18 +188,21 @@ export class BlockChange extends BlockBase {
         if (field) {
           field.setValue(value);
         } else {
-          console.warn('Can\'t set non-existent field: ' + this.name);
+          console.warn("Can't set non-existent field: " + this.name);
         }
         break;
       }
       case 'comment':
-        block.setCommentText(value as string || null);
+        block.setCommentText((value as string) || null);
         break;
       case 'collapsed':
         block.setCollapsed(!!value);
         break;
       case 'disabled':
-        block.setEnabled(!value);
+        block.setDisabledReason(
+          !!value,
+          this.disabledReason ?? MANUALLY_DISABLED,
+        );
         break;
       case 'inline':
         block.setInputsInline(!!value);
@@ -181,13 +210,15 @@ export class BlockChange extends BlockBase {
       case 'mutation': {
         const oldState = BlockChange.getExtraBlockState_(block as BlockSvg);
         if (block.loadExtraState) {
-          block.loadExtraState(JSON.parse(value as string || '{}'));
+          block.loadExtraState(JSON.parse((value as string) || '{}'));
         } else if (block.domToMutation) {
           block.domToMutation(
-              utilsXml.textToDom(value as string || '<mutation/>'));
+            utilsXml.textToDom((value as string) || '<mutation/>'),
+          );
         }
         eventUtils.fire(
-            new BlockChange(block, 'mutation', null, oldState, value));
+          new BlockChange(block, 'mutation', null, oldState, value),
+        );
         break;
       }
       default:
@@ -207,7 +238,7 @@ export class BlockChange extends BlockBase {
    */
   static getExtraBlockState_(block: BlockSvg): string {
     if (block.saveExtraState) {
-      const state = block.saveExtraState();
+      const state = block.saveExtraState(true);
       return state ? JSON.stringify(state) : '';
     } else if (block.mutationToDom) {
       const state = block.mutationToDom();
@@ -222,6 +253,7 @@ export interface BlockChangeJson extends BlockBaseJson {
   name?: string;
   newValue: unknown;
   oldValue: unknown;
+  disabledReason?: string;
 }
 
-registry.register(registry.Type.EVENT, eventUtils.CHANGE, BlockChange);
+registry.register(registry.Type.EVENT, EventType.BLOCK_CHANGE, BlockChange);

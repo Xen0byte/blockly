@@ -4,16 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * All the values that we expect developers to be able to change
- * before injecting Blockly. Changing these values during run time is not
- * generally recommended.
- *
- * @namespace Blockly.config
- */
-import * as goog from '../closure/goog/goog.js';
-goog.declareModuleId('Blockly.config');
-
+// Former goog.module ID: Blockly.config
 
 /**
  * All the values that we expect developers to be able to change
@@ -56,7 +47,6 @@ export const config: Config = {
   /**
    * Maximum misalignment between connections for them to snap together.
    * This should be the same as the snap radius.
-   *
    */
   connectingSnapRadius: DEFAULT_SNAP_RADIUS,
   /**
